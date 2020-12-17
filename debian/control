@@ -1,7 +1,7 @@
 Source: pdns
 Section: net
 Priority: optional
-Standards-Version: 4.5.0
+Standards-Version: 4.5.1
 Maintainer: pdns packagers <pdns@packages.debian.org>
 Uploaders: Chris Hofstaedtler <zeha@debian.org>,
            Marc Haber <mh+debian-packages@zugschlus.de>
