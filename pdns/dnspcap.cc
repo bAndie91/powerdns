@@ -30,20 +30,25 @@
 #include "namespaces.hh"
 PcapPacketReader::PcapPacketReader(const string& fname) : d_fname(fname)
 {
-  d_fp=fopen(fname.c_str(),"r");
-  if(!d_fp)
+  d_fp = std::unique_ptr<FILE, int(*)(FILE*)>(fopen(fname.c_str(), "r"), fclose);
+  if (!d_fp) {
     unixDie("Unable to open file " + fname);
-  
-  int flags=fcntl(fileno(d_fp),F_GETFL,0);
-  fcntl(fileno(d_fp), F_SETFL,flags&(~O_NONBLOCK)); // bsd needs this in stdin (??)
-  
+  }
+
+  int flags = fcntl(fileno(d_fp.get()), F_GETFL, 0);
+  fcntl(fileno(d_fp.get()), F_SETFL, flags & (~O_NONBLOCK)); // bsd needs this in stdin (??)
+
   checkedFread(&d_pfh);
-  
-  if(d_pfh.magic != 2712847316UL)
-    throw runtime_error((format("PCAP file %s has bad magic %x, should be %x") % fname % d_pfh.magic % 2712847316UL).str());
-  
+
+  if (d_pfh.magic != 2712847316UL) {
+    throw runtime_error((boost::format("PCAP file %s has bad magic %x, should be %x") % fname % d_pfh.magic % 2712847316UL).str());
+  }
+
   if( d_pfh.linktype==1) {
     d_skipMediaHeader=sizeof(struct ether_header);
+  }
+  else if( d_pfh.linktype==12) { // LOOP
+    d_skipMediaHeader=4;
   }
   else if(d_pfh.linktype==101) {
     d_skipMediaHeader=0;
@@ -51,28 +56,23 @@ PcapPacketReader::PcapPacketReader(const string& fname) : d_fname(fname)
   else if(d_pfh.linktype==113) {
     d_skipMediaHeader=16;
   }
-  else throw runtime_error((format("Unsupported link type %d") % d_pfh.linktype).str());
-  
+  else throw runtime_error((boost::format("Unsupported link type %d") % d_pfh.linktype).str());
+
   d_runts = d_oversized = d_correctpackets = d_nonetheripudp = 0;
 }
 
-PcapPacketReader::~PcapPacketReader()
-{
-  fclose(d_fp);
-}
-
-
 void PcapPacketReader::checkedFreadSize(void* ptr, size_t size) 
 {
-  int ret=fread(ptr, 1, size, d_fp);
-  if(ret < 0)
-    unixDie( (format("Error reading %d bytes from %s") % size % d_fname).str());
-  
+  int ret = fread(ptr, 1, size, d_fp.get());
+  if (ret < 0) {
+    unixDie( (boost::format("Error reading %d bytes from %s") % size % d_fname).str());
+  }
+
   if(!ret)
     throw EofException();
   
   if((size_t)ret != size)
-    throw EofException((format("Incomplete read from '%s', got only %d bytes") % d_fname % ret).str());
+    throw EofException((boost::format("Incomplete read from '%s', got only %d bytes") % d_fname % ret).str());
 }
 
 bool PcapPacketReader::getUDPPacket()
@@ -87,7 +87,7 @@ try
 
     if(d_pheader.caplen > sizeof(d_buffer)) {
       d_oversized++;
-      throw runtime_error((format("Can't handle a %d byte packet, have space for %d")  % d_pheader.caplen % sizeof(d_buffer)).str());
+      throw runtime_error((boost::format("Can't handle a %d byte packet, have space for %d")  % d_pheader.caplen % sizeof(d_buffer)).str());
     }
 
     checkedFreadSize(d_buffer, d_pheader.caplen);
@@ -113,6 +113,16 @@ try
       }
       d_ether=reinterpret_cast<struct ether_header*>(d_buffer);
       contentCode=ntohs(d_ether->ether_type);
+    }
+    else if(d_pfh.linktype == 12) { // LOOP
+      if (d_pheader.caplen < (d_skipMediaHeader + sizeof(*d_ip))) {
+        d_runts++;
+        continue;
+      }
+      if(d_ip->ip_v == 4)
+	contentCode = 0x0800;
+      else
+	contentCode = 0x86dd;
     }
     else if(d_pfh.linktype==101) {
       if (d_pheader.caplen < (d_skipMediaHeader + sizeof(*d_ip))) {
@@ -218,12 +228,14 @@ PcapPacketWriter::PcapPacketWriter(const string& fname, const PcapPacketReader& 
 
 PcapPacketWriter::PcapPacketWriter(const string& fname) : d_fname(fname)
 {
-  d_fp=fopen(fname.c_str(),"w");
-  if(!d_fp)
+  d_fp = std::unique_ptr<FILE, int(*)(FILE*)>(fopen(fname.c_str(),"w"), fclose);
+
+  if (!d_fp) {
     unixDie("Unable to open file");
-  
-  int flags=fcntl(fileno(d_fp),F_GETFL,0);
-  fcntl(fileno(d_fp), F_SETFL,flags&(~O_NONBLOCK)); // bsd needs this in stdin (??)
+  }
+
+  int flags = fcntl(fileno(d_fp.get()), F_GETFL, 0);
+  fcntl(fileno(d_fp.get()), F_SETFL,flags & (~O_NONBLOCK)); // bsd needs this in stdin (??)
 }
 
 void PcapPacketWriter::write()
@@ -233,14 +245,9 @@ void PcapPacketWriter::write()
   }
 
   if(d_first) {
-    fwrite(&d_ppr->d_pfh, 1, sizeof(d_ppr->d_pfh), d_fp);
+    fwrite(&d_ppr->d_pfh, 1, sizeof(d_ppr->d_pfh), d_fp.get());
     d_first=false;
   }
-  fwrite(&d_ppr->d_pheader, 1, sizeof(d_ppr->d_pheader), d_fp);
-  fwrite(d_ppr->d_buffer, 1, d_ppr->d_pheader.caplen, d_fp);
-}
-
-PcapPacketWriter::~PcapPacketWriter()
-{
-  fclose(d_fp);
+  fwrite(&d_ppr->d_pheader, 1, sizeof(d_ppr->d_pheader), d_fp.get());
+  fwrite(d_ppr->d_buffer, 1, d_ppr->d_pheader.caplen, d_fp.get());
 }

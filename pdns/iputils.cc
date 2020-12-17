@@ -158,6 +158,28 @@ void setSocketIgnorePMTU(int sockfd)
 #endif /* defined(IP_MTU_DISCOVER) && defined(IP_PMTUDISC_DONT) */
 }
 
+bool setReusePort(int sockfd)
+{
+#if defined(SO_REUSEPORT_LB)
+  try {
+    SSetsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT_LB, 1);
+    return true;
+  }
+  catch (const std::exception& e) {
+    return false;
+  }
+#elif defined(SO_REUSEPORT)
+  try {
+    SSetsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, 1);
+    return true;
+  }
+  catch (const std::exception& e) {
+    return false;
+  }
+#endif
+  return false;
+}
+
 bool HarvestTimestamp(struct msghdr* msgh, struct timeval* tv) 
 {
 #ifdef SO_TIMESTAMP
@@ -215,6 +237,28 @@ bool IsAnyAddress(const ComboAddress& addr)
     return !memcmp(&addr.sin6.sin6_addr, &in6addr_any, sizeof(addr.sin6.sin6_addr));
   
   return false;
+}
+int sendOnNBSocket(int fd, const struct msghdr *msgh)
+{
+  int sendErr = 0;
+#ifdef __OpenBSD__
+  // OpenBSD can and does return EAGAIN on non-blocking datagram sockets
+  for (int i = 0; i < 10; i++) { // Arbitrary upper bound
+    if (sendmsg(fd, msgh, 0) != -1) {
+      sendErr = 0;
+      break;
+    }
+    sendErr = errno;
+    if (sendErr != EAGAIN) {
+      break;
+    }
+  }
+#else
+  if (sendmsg(fd, msgh, 0) == -1) {
+    sendErr = errno;
+  }
+#endif
+  return sendErr;
 }
 
 ssize_t sendfromto(int sock, const char* data, size_t len, int flags, const ComboAddress& from, const ComboAddress& to)
@@ -413,4 +457,43 @@ bool isTCPSocketUsable(int sock)
   } while (err == EINTR);
 
   return false;
+}
+/* mission in life: parse four cases
+   1) [2002::1]:53
+   2) 1.2.3.4
+   3) 1.2.3.4:5300
+   4) 2001::1 no port allowed
+*/
+
+ComboAddress parseIPAndPort(const std::string& input, uint16_t port)
+{
+  if (input[0] == '[') { // case 1
+    auto both = splitField(input.substr(1), ']');
+    return ComboAddress(both.first, both.second.empty() ? port : static_cast<uint16_t>(pdns_stou(both.second.substr(1))));
+  }
+
+  string::size_type count = 0;
+  for (char c : input) {
+    if (c == ':') {
+      count++;
+    }
+    if (count > 1) {
+      break;
+    }
+  }
+  switch (count) {
+  case 0: // case 2
+    return ComboAddress(input, port);
+  case 1: { // case 3
+    string::size_type cpos = input.rfind(':');
+    pair<std::string,std::string> both;
+    both.first = input.substr(0, cpos);
+    both.second = input.substr(cpos + 1);
+
+    uint16_t newport = static_cast<uint16_t>(pdns_stou(both.second));
+    return ComboAddress(both.first, newport);
+  }
+  default: // case 4
+    return ComboAddress(input, port);
+  }
 }

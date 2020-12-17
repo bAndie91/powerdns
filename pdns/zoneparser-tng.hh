@@ -24,19 +24,20 @@
 #include <cstdio>
 #include <stdexcept>
 #include <stack>
+#include <deque>
 
 #include "namespaces.hh"
 
 class ZoneParserTNG
 {
 public:
-  ZoneParserTNG(const string& fname, const DNSName& zname=g_rootdnsname, const string& reldir="");
-  ZoneParserTNG(const vector<string> zonedata, const DNSName& zname);
+  ZoneParserTNG(const string& fname, const DNSName& zname=g_rootdnsname, const string& reldir="", bool upgradeContent=false);
+  ZoneParserTNG(const vector<string> zonedata, const DNSName& zname, bool upgradeContent=false);
 
   ~ZoneParserTNG();
   bool get(DNSResourceRecord& rr, std::string* comment=0);
   typedef runtime_error exception;
-  typedef deque<pair<string::size_type, string::size_type> > parts_t;
+  typedef std::deque<pair<string::size_type, string::size_type> > parts_t;
   DNSName getZoneName();
   string getLineOfFile(); // for error reporting purposes
   pair<string,int> getLineNumAndFile(); // idem
@@ -77,4 +78,5 @@ private:
   bool d_havedollarttl;
   bool d_fromfile;
   bool d_generateEnabled{true};
+  bool d_upgradeContent;
 };

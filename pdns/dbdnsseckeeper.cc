@@ -47,8 +47,9 @@ using namespace boost::assign;
 
 DNSSECKeeper::keycache_t DNSSECKeeper::s_keycache;
 DNSSECKeeper::metacache_t DNSSECKeeper::s_metacache;
-pthread_rwlock_t DNSSECKeeper::s_metacachelock = PTHREAD_RWLOCK_INITIALIZER;
-pthread_rwlock_t DNSSECKeeper::s_keycachelock = PTHREAD_RWLOCK_INITIALIZER;
+int64_t DNSSECKeeper::s_metaCacheCleanActions = 0;
+ReadWriteLock DNSSECKeeper::s_metacachelock;
+ReadWriteLock DNSSECKeeper::s_keycachelock;
 AtomicCounter DNSSECKeeper::s_ops;
 time_t DNSSECKeeper::s_last_prune;
 size_t DNSSECKeeper::s_maxEntries = 0;
@@ -58,9 +59,9 @@ bool DNSSECKeeper::doesDNSSEC()
   return d_keymetadb->doesDNSSEC();
 }
 
-bool DNSSECKeeper::isSecuredZone(const DNSName& zone) 
+bool DNSSECKeeper::isSecuredZone(const DNSName& zone, bool useCache) 
 {
-  if(isPresigned(zone))
+  if(isPresigned(zone, useCache))
     return true;
 
   keyset_t keys = getKeys(zone); // does the cache
@@ -73,12 +74,18 @@ bool DNSSECKeeper::isSecuredZone(const DNSName& zone)
   return false;
 }
 
-bool DNSSECKeeper::isPresigned(const DNSName& name)
+bool DNSSECKeeper::isPresigned(const DNSName& name, bool useCache)
 {
   string meta;
-  getFromMeta(name, "PRESIGNED", meta);
+  if (useCache) {
+    getFromMeta(name, "PRESIGNED", meta);
+  }
+  else {
+    getFromMetaNoCache(name, "PRESIGNED", meta);
+  }
   return meta=="1";
 }
+
 
 bool DNSSECKeeper::addKey(const DNSName& name, bool setSEPBit, int algorithm, int64_t& id, int bits, bool active, bool published)
 {
@@ -107,7 +114,7 @@ bool DNSSECKeeper::addKey(const DNSName& name, bool setSEPBit, int algorithm, in
   dspk.setKey(dpk);
   dspk.d_algorithm = algorithm;
   dspk.d_flags = setSEPBit ? 257 : 256;
-  return addKey(name, dspk, id, active, published);
+  return addKey(name, dspk, id, active, published) && clearKeyCache(name);
 }
 
 void DNSSECKeeper::clearAllCaches() {
@@ -119,29 +126,37 @@ void DNSSECKeeper::clearAllCaches() {
   s_metacache.clear();
 }
 
-void DNSSECKeeper::clearCaches(const DNSName& name)
+
+bool DNSSECKeeper::clearKeyCache(const DNSName& name)
 {
-  {
-    WriteLock l(&s_keycachelock);
-    s_keycache.erase(name); 
-  }
-  WriteLock l(&s_metacachelock);
-  pair<metacache_t::iterator, metacache_t::iterator> range = s_metacache.equal_range(tie(name));
-  while(range.first != range.second)
-    s_metacache.erase(range.first++);
+  WriteLock l(&s_keycachelock);
+  s_keycache.erase(name);
+  return true;
 }
 
+bool DNSSECKeeper::clearMetaCache(const DNSName& name)
+{
+  WriteLock l(&s_metacachelock);
+  s_metacache.erase(name);
+  ++s_metaCacheCleanActions;
+  return true;
+}
+
+void DNSSECKeeper::clearCaches(const DNSName& name)
+{
+  clearKeyCache(name);
+  clearMetaCache(name);
+}
 
 bool DNSSECKeeper::addKey(const DNSName& name, const DNSSECPrivateKey& dpk, int64_t& id, bool active, bool published)
 {
-  clearCaches(name);
   DNSBackend::KeyData kd;
   kd.flags = dpk.d_flags; // the dpk doesn't get stored, only they key part
   kd.active = active;
   kd.published = published;
   kd.content = dpk.getKey()->convertToISC();
  // now store it
-  return d_keymetadb->addDomainKey(name, kd, id);
+  return d_keymetadb->addDomainKey(name, kd, id) && clearKeyCache(name);
 }
 
 
@@ -173,32 +188,27 @@ DNSSECPrivateKey DNSSECKeeper::getKeyById(const DNSName& zname, unsigned int id)
 
 bool DNSSECKeeper::removeKey(const DNSName& zname, unsigned int id)
 {
-  clearCaches(zname);
-  return d_keymetadb->removeDomainKey(zname, id);
+  return d_keymetadb->removeDomainKey(zname, id) && clearKeyCache(zname);
 }
 
 bool DNSSECKeeper::deactivateKey(const DNSName& zname, unsigned int id)
 {
-  clearCaches(zname);
-  return d_keymetadb->deactivateDomainKey(zname, id);
+  return d_keymetadb->deactivateDomainKey(zname, id) && clearKeyCache(zname);
 }
 
 bool DNSSECKeeper::activateKey(const DNSName& zname, unsigned int id)
 {
-  clearCaches(zname);
-  return d_keymetadb->activateDomainKey(zname, id);
+  return d_keymetadb->activateDomainKey(zname, id) && clearKeyCache(zname);
 }
 
 bool DNSSECKeeper::unpublishKey(const DNSName& zname, unsigned int id)
 {
-  clearCaches(zname);
-  return d_keymetadb->unpublishDomainKey(zname, id);
+  return d_keymetadb->unpublishDomainKey(zname, id) && clearKeyCache(zname);
 }
 
 bool DNSSECKeeper::publishKey(const DNSName& zname, unsigned int id)
 {
-  clearCaches(zname);
-  return d_keymetadb->publishDomainKey(zname, id);
+  return d_keymetadb->publishDomainKey(zname, id) && clearKeyCache(zname);
 }
 
 void DNSSECKeeper::getFromMetaOrDefault(const DNSName& zname, const std::string& key, std::string& value, const std::string& defaultvalue)
@@ -212,51 +222,77 @@ void DNSSECKeeper::getFromMetaOrDefault(const DNSName& zname, const std::string&
 bool DNSSECKeeper::getFromMeta(const DNSName& zname, const std::string& key, std::string& value)
 {
   static int ttl = ::arg().asNum("domain-metadata-cache-ttl");
-  bool isset = false;
-  value.clear();
-  unsigned int now = time(0);
 
   if(!((++s_ops) % 100000)) {
     cleanup();
   }
 
-  if (ttl > 0) {
-    ReadLock l(&s_metacachelock);
+  value.clear();
+  time_t now = time(nullptr);
 
-    metacache_t::const_iterator iter = s_metacache.find(tie(zname, key));
+  bool ret = false;
+  bool fromCache = false;
+  METAValues meta;
+
+  if (ttl) {
+    ReadLock l(&s_metacachelock);
+    auto iter = s_metacache.find(zname);
     if(iter != s_metacache.end() && iter->d_ttd > now) {
-      value = iter->d_value;
-      return iter->d_isset;
+      meta = iter->d_value;
+      fromCache = true;
+    }
+    else {
+      d_metaCacheCleanAction = s_metaCacheCleanActions;
     }
   }
-  vector<string> meta;
-  d_keymetadb->getDomainMetadata(zname, key, meta);
-  if(!meta.empty()) {
-    value=std::move(*meta.begin());
-    isset = true;
+
+  if (!fromCache) {
+    d_keymetadb->getAllDomainMetadata(zname, meta);
   }
 
-  if (ttl > 0) {
+  auto iter = meta.find(key);
+  if (iter != meta.end()) {
+    if (!iter->second.empty()) {
+      value = *iter->second.begin();
+    }
+    ret = true;
+  }
+
+  if (ttl && !fromCache) {
     METACacheEntry nce;
     nce.d_domain=zname;
     nce.d_ttd = now + ttl;
-    nce.d_key= key;
-    nce.d_value = value;
-    nce.d_isset = isset;
+    nce.d_value = std::move(meta);
     {
       WriteLock l(&s_metacachelock);
+      if(d_metaCacheCleanAction != s_metaCacheCleanActions) {
+        return false;
+      }
       lruReplacingInsert<SequencedTag>(s_metacache, nce);
     }
   }
-  return isset;
+
+  return ret;
 }
 
-void DNSSECKeeper::getSoaEdit(const DNSName& zname, std::string& value)
+bool DNSSECKeeper::getFromMetaNoCache(const DNSName& name, const std::string& kind, std::string& value)
+{
+  std::vector<std::string> meta;
+  if (d_keymetadb->getDomainMetadata(name, kind, meta)) {
+    if(!meta.empty()) {
+      value = *meta.begin();
+      return true;
+    }
+  }
+  return false;
+}
+
+void DNSSECKeeper::getSoaEdit(const DNSName& zname, std::string& value, bool useCache)
 {
   static const string soaEdit(::arg()["default-soa-edit"]);
   static const string soaEditSigned(::arg()["default-soa-edit-signed"]);
 
-  if (isPresigned(zname)) {
+  if (isPresigned(zname, useCache)) {
     // SOA editing on a presigned zone never makes sense
     return;
   }
@@ -264,7 +300,7 @@ void DNSSECKeeper::getSoaEdit(const DNSName& zname, std::string& value)
   getFromMeta(zname, "SOA-EDIT", value);
 
   if ((!soaEdit.empty() || !soaEditSigned.empty()) && value.empty()) {
-    if (!soaEditSigned.empty() && isSecuredZone(zname))
+    if (!soaEditSigned.empty() && isSecuredZone(zname, useCache))
       value=soaEditSigned;
     if (value.empty())
       value=soaEdit;
@@ -276,7 +312,7 @@ void DNSSECKeeper::getSoaEdit(const DNSName& zname, std::string& value)
 uint64_t DNSSECKeeper::dbdnssecCacheSizes(const std::string& str)
 {
   if(str=="meta-cache-size") {
-    ReadLock l(&s_metacachelock); 
+    ReadLock l(&s_metacachelock);
     return s_metacache.size();
   }
   else if(str=="key-cache-size") {
@@ -286,10 +322,15 @@ uint64_t DNSSECKeeper::dbdnssecCacheSizes(const std::string& str)
   return (uint64_t)-1;
 }
 
-bool DNSSECKeeper::getNSEC3PARAM(const DNSName& zname, NSEC3PARAMRecordContent* ns3p, bool* narrow)
+bool DNSSECKeeper::getNSEC3PARAM(const DNSName& zname, NSEC3PARAMRecordContent* ns3p, bool* narrow, bool useCache)
 {
   string value;
-  getFromMeta(zname, "NSEC3PARAM", value);
+  if(useCache) {
+    getFromMeta(zname, "NSEC3PARAM", value);
+  }
+  else {
+    getFromMetaNoCache(zname, "NSEC3PARAM", value);
+  }
   if(value.empty()) { // "no NSEC3"
     return false;
   }
@@ -307,7 +348,12 @@ bool DNSSECKeeper::getNSEC3PARAM(const DNSName& zname, NSEC3PARAMRecordContent* 
     }
   }
   if(narrow) {
-    getFromMeta(zname, "NSEC3NARROW", value);
+    if(useCache) {
+      getFromMeta(zname, "NSEC3NARROW", value);
+    }
+    else {
+      getFromMetaNoCache(zname, "NSEC3NARROW", value);
+    }
     *narrow = (value=="1");
   }
   return true;
@@ -345,7 +391,6 @@ bool DNSSECKeeper::setNSEC3PARAM(const DNSName& zname, const NSEC3PARAMRecordCon
   if (!checkNSEC3PARAM(ns3p, error_msg))
     throw runtime_error("NSEC3PARAMs provided for zone '"+zname.toLogString()+"' are invalid: " + error_msg);
 
-  clearCaches(zname);
   string descr = ns3p.getZoneRepresentation();
   vector<string> meta;
   meta.push_back(descr);
@@ -355,30 +400,27 @@ bool DNSSECKeeper::setNSEC3PARAM(const DNSName& zname, const NSEC3PARAMRecordCon
     if(narrow)
       meta.push_back("1");
     
-    return d_keymetadb->setDomainMetadata(zname, "NSEC3NARROW", meta);
+    return d_keymetadb->setDomainMetadata(zname, "NSEC3NARROW", meta) && clearMetaCache(zname);
   }
   return false;
 }
 
 bool DNSSECKeeper::unsetNSEC3PARAM(const DNSName& zname)
 {
-  clearCaches(zname);
-  return (d_keymetadb->setDomainMetadata(zname, "NSEC3PARAM", vector<string>()) && d_keymetadb->setDomainMetadata(zname, "NSEC3NARROW", vector<string>()));
+  return (d_keymetadb->setDomainMetadata(zname, "NSEC3PARAM", vector<string>()) && d_keymetadb->setDomainMetadata(zname, "NSEC3NARROW", vector<string>())) && clearMetaCache(zname);
 }
 
 
 bool DNSSECKeeper::setPresigned(const DNSName& zname)
 {
-  clearCaches(zname);
   vector<string> meta;
   meta.push_back("1");
-  return d_keymetadb->setDomainMetadata(zname, "PRESIGNED", meta);
+  return d_keymetadb->setDomainMetadata(zname, "PRESIGNED", meta) && clearMetaCache(zname);
 }
 
 bool DNSSECKeeper::unsetPresigned(const DNSName& zname)
 {
-  clearCaches(zname);
-  return d_keymetadb->setDomainMetadata(zname, "PRESIGNED", vector<string>());
+  return d_keymetadb->setDomainMetadata(zname, "PRESIGNED", vector<string>()) && clearMetaCache(zname);
 }
 
 /**
@@ -392,10 +434,9 @@ bool DNSSECKeeper::unsetPresigned(const DNSName& zname)
  */
 bool DNSSECKeeper::setPublishCDS(const DNSName& zname, const string& digestAlgos)
 {
-  clearCaches(zname);
   vector<string> meta;
   meta.push_back(digestAlgos);
-  return d_keymetadb->setDomainMetadata(zname, "PUBLISH-CDS", meta);
+  return d_keymetadb->setDomainMetadata(zname, "PUBLISH-CDS", meta) && clearMetaCache(zname);
 }
 
 void DNSSECKeeper::getPublishCDS(const DNSName& zname, std::string& value)
@@ -411,8 +452,7 @@ void DNSSECKeeper::getPublishCDS(const DNSName& zname, std::string& value)
  */
 bool DNSSECKeeper::unsetPublishCDS(const DNSName& zname)
 {
-  clearCaches(zname);
-  return d_keymetadb->setDomainMetadata(zname, "PUBLISH-CDS", vector<string>());
+  return d_keymetadb->setDomainMetadata(zname, "PUBLISH-CDS", vector<string>()) && clearMetaCache(zname);
 }
 
 /**
@@ -421,12 +461,11 @@ bool DNSSECKeeper::unsetPublishCDS(const DNSName& zname)
  * @param zname        DNSName of the zone
  * @return             true if the data was inserted, false otherwise
  */
-bool DNSSECKeeper::setPublishCDNSKEY(const DNSName& zname)
+bool DNSSECKeeper::setPublishCDNSKEY(const DNSName& zname, bool deleteAlg)
 {
-  clearCaches(zname);
   vector<string> meta;
-  meta.push_back("1");
-  return d_keymetadb->setDomainMetadata(zname, "PUBLISH-CDNSKEY", meta);
+  meta.push_back(deleteAlg ? "0" : "1");
+  return d_keymetadb->setDomainMetadata(zname, "PUBLISH-CDNSKEY", meta) && clearMetaCache(zname);
 }
 
 void DNSSECKeeper::getPublishCDNSKEY(const DNSName& zname, std::string& value)
@@ -442,8 +481,7 @@ void DNSSECKeeper::getPublishCDNSKEY(const DNSName& zname, std::string& value)
  */
 bool DNSSECKeeper::unsetPublishCDNSKEY(const DNSName& zname)
 {
-  clearCaches(zname);
-  return d_keymetadb->setDomainMetadata(zname, "PUBLISH-CDNSKEY", vector<string>());
+  return d_keymetadb->setDomainMetadata(zname, "PUBLISH-CDNSKEY", vector<string>()) && clearMetaCache(zname);
 }
 
 /**
@@ -567,29 +605,30 @@ bool DNSSECKeeper::checkKeys(const DNSName& zone, vector<string>* errorMessages)
   return retval;
 }
 
-bool DNSSECKeeper::getPreRRSIGs(UeberBackend& db, const DNSName& signer, const DNSName& qname,
-        const DNSName& wildcardname, const QType& qtype,
-        DNSResourceRecord::Place signPlace, vector<DNSZoneRecord>& rrsigs, uint32_t signTTL)
+void DNSSECKeeper::getPreRRSIGs(UeberBackend& db, vector<DNSZoneRecord>& rrs, uint32_t signTTL)
 {
-  // cerr<<"Doing DB lookup for precomputed RRSIGs for '"<<(wildcardname.empty() ? qname : wildcardname)<<"'"<<endl;
-        SOAData sd;
-        if(!db.getSOAUncached(signer, sd)) {
-                DLOG(g_log<<"Could not get SOA for domain"<<endl);
-                return false;
-        }
-        db.lookup(QType(QType::RRSIG), wildcardname.countLabels() ? wildcardname : qname, sd.domain_id);
-        DNSZoneRecord rr;
-        while(db.get(rr)) {
-          auto rrsig = getRR<RRSIGRecordContent>(rr.dr);
-          if(rrsig->d_type == qtype.getCode() && rrsig->d_signer==signer) {
-            if (wildcardname.countLabels())
-              rr.dr.d_name = qname;
-            rr.dr.d_place = signPlace;
-            rr.dr.d_ttl = signTTL;
-            rrsigs.push_back(rr);
-          }
-        }
-        return true;
+  if(rrs.empty()) {
+    return;
+  }
+
+  const auto rr = *rrs.rbegin();
+
+  DNSZoneRecord dzr;
+  std::shared_ptr<RRSIGRecordContent> rrsig;
+
+  db.lookup(QType(QType::RRSIG), !rr.wildcardname.empty() ? rr.wildcardname : rr.dr.d_name, rr.domain_id);
+  while(db.get(dzr)) {
+    rrsig = getRR<RRSIGRecordContent>(dzr.dr);
+    if(rrsig->d_type == rr.dr.d_type) {
+      if(!rr.wildcardname.empty()) {
+        dzr.dr.d_name = rr.dr.d_name;
+      }
+      dzr.dr.d_place = rr.dr.d_place;
+      dzr.dr.d_ttl = signTTL;
+
+      rrs.emplace_back(dzr);
+    }
+  }
 }
 
 bool DNSSECKeeper::TSIGGrantsAccess(const DNSName& zone, const DNSName& keyname)
@@ -647,7 +686,7 @@ bool DNSSECKeeper::unSecureZone(const DNSName& zone, string& error, string& info
  * \param doTransaction Whether or not to wrap the rectify in a transaction
  */
 bool DNSSECKeeper::rectifyZone(const DNSName& zone, string& error, string& info, bool doTransaction) {
-  if (isPresigned(zone)) {
+  if (isPresigned(zone, doTransaction)) {
     error =  "Rectify presigned zone '"+zone.toLogString()+"' is not allowed/necessary.";
     return false;
   }
@@ -697,11 +736,11 @@ bool DNSSECKeeper::rectifyZone(const DNSName& zone, string& error, string& info,
   }
 
   NSEC3PARAMRecordContent ns3pr;
-  bool securedZone = isSecuredZone(zone);
+  bool securedZone = isSecuredZone(zone, doTransaction);
   bool haveNSEC3 = false, isOptOut = false, narrow = false;
 
   if(securedZone) {
-    haveNSEC3 = getNSEC3PARAM(zone, &ns3pr, &narrow);
+    haveNSEC3 = getNSEC3PARAM(zone, &ns3pr, &narrow, doTransaction);
     isOptOut = (haveNSEC3 && ns3pr.d_flags);
 
     if(!haveNSEC3) {

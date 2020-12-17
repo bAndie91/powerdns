@@ -114,26 +114,21 @@ static void startNewTransaction()
 static void emitDomain(const DNSName& domain, const vector<ComboAddress> *masters = 0) {
   string iDomain = domain.toStringRootDot();
   if(!::arg().mustDo("slave")) {
-    if(g_mode==POSTGRES || g_mode==MYSQL || g_mode==SQLITE) {
-      cout<<"insert into domains (name,type) values ("<<toLower(sqlstr(iDomain))<<",'NATIVE');"<<endl;
-    }
+    cout<<"insert into domains (name,type) values ("<<toLower(sqlstr(iDomain))<<",'NATIVE');"<<endl;
   }
-  else 
+  else
   {
-
-    if(g_mode==POSTGRES || g_mode==MYSQL || g_mode==SQLITE) {
-      string mstrs;
-      if (masters != 0 && ! masters->empty()) {
-        for(const auto& mstr :  *masters) {
-          mstrs.append(mstr.toStringWithPortExcept(53));
-          mstrs.append(1, ' ');
-        }
+    string mstrs;
+    if (masters != 0 && ! masters->empty()) {
+      for(const auto& mstr :  *masters) {
+        mstrs.append(mstr.toStringWithPortExcept(53));
+        mstrs.append(1, ' ');
       }
-      if (mstrs.empty())
-        cout<<"insert into domains (name,type) values ("<<sqlstr(iDomain)<<",'NATIVE');"<<endl;
-      else
-        cout<<"insert into domains (name,type,master) values ("<<sqlstr(iDomain)<<",'SLAVE'"<<", '"<<mstrs<<"');"<<endl;
     }
+    if (mstrs.empty())
+      cout<<"insert into domains (name,type) values ("<<sqlstr(iDomain)<<",'NATIVE');"<<endl;
+    else
+      cout<<"insert into domains (name,type,master) values ("<<sqlstr(iDomain)<<",'SLAVE'"<<", '"<<mstrs<<"');"<<endl;
   }
 }
 
@@ -172,32 +167,17 @@ static void emitRecord(const DNSName& zoneName, const DNSName &DNSqname, const s
     string::size_type pos = content.find_first_not_of("0123456789");
     if(pos != string::npos)
       boost::erase_head(content, pos);
-    trim_left(content);
+    boost::trim_left(content);
   }
 
-  bool auth = true;
-  if(qtype == "NS" && !pdns_iequals(qname, zname)) {
-    auth=false;
-  }
+  cout<<"insert into records (domain_id, name, type,content,ttl,prio,disabled) select id ,"<<
+    sqlstr(toLower(qname))<<", "<<
+    sqlstr(qtype)<<", "<<
+    sqlstr(stripDotContent(content))<<", "<<ttl<<", "<<prio<<", "<<(g_mode==POSTGRES ? (disabled ? "'t'" : "'f'") : std::to_string(disabled))<<
+    " from domains where name="<<toLower(sqlstr(zname))<<";\n";
 
-  if(g_mode==MYSQL || g_mode==SQLITE) {
-    cout<<"insert into records (domain_id, name, type,content,ttl,prio,disabled) select id ,"<<
-      sqlstr(toLower(qname))<<", "<<
-      sqlstr(qtype)<<", "<<
-      sqlstr(stripDotContent(content))<<", "<<ttl<<", "<<prio<<", "<<disabled<<
-      " from domains where name="<<toLower(sqlstr(zname))<<";\n";
-
-    if(!recordcomment.empty()) {
-      cout<<"insert into comments (domain_id,name,type,modified_at, comment) select id, "<<toLower(sqlstr(stripDot(qname)))<<", "<<sqlstr(qtype)<<", "<<time(0)<<", "<<sqlstr(recordcomment)<<" from domains where name="<<toLower(sqlstr(zname))<<";\n";
-    }
-  }
-  else if(g_mode==POSTGRES) {
-    cout<<"insert into records (domain_id, name, ordername, auth, type,content,ttl,prio,disabled) select id ,"<<
-      sqlstr(toLower(qname))<<", "<<
-      sqlstr(DNSName(qname).makeRelative(DNSName(zname)).makeLowerCase().labelReverse().toString(" ", false))<<", '"<< (auth  ? 't' : 'f') <<"', "<<
-      sqlstr(qtype)<<", "<<
-      sqlstr(stripDotContent(content))<<", "<<ttl<<", "<<prio<<", '"<<(disabled ? 't': 'f') <<
-      "' from domains where name="<<toLower(sqlstr(zname))<<";\n";
+  if(!recordcomment.empty()) {
+    cout<<"insert into comments (domain_id,name,type,modified_at, comment) select id, "<<toLower(sqlstr(stripDot(qname)))<<", "<<sqlstr(qtype)<<", "<<time(0)<<", "<<sqlstr(recordcomment)<<" from domains where name="<<toLower(sqlstr(zname))<<";\n";
   }
 }
 
@@ -231,11 +211,7 @@ try
     ::arg().set("zone","Zonefile to parse")="";
     ::arg().set("zone-name","Specify an $ORIGIN in case it is not present")="";
     ::arg().set("named-conf","Bind 8/9 named.conf to parse")="";
-    
-    ::arg().set("soa-minimum-ttl","Do not change")="0";
-    ::arg().set("soa-refresh-default","Do not change")="0";
-    ::arg().set("soa-retry-default","Do not change")="0";
-    ::arg().set("soa-expire-default","Do not change")="0";
+
     ::arg().set("max-generate-steps", "Maximum number of $GENERATE steps when loading a zone from a file")="0";
 
     ::arg().setCmd("help","Provide a helpful message");

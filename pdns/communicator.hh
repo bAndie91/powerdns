@@ -45,6 +45,7 @@ struct SuckRequest
 {
   DNSName domain;
   ComboAddress master;
+  bool force;
   bool operator<(const SuckRequest& b) const
   {
     return tie(domain, master) < tie(b.domain, b.master);
@@ -149,9 +150,6 @@ class CommunicatorClass
 public:
   CommunicatorClass() 
   {
-    pthread_mutex_init(&d_lock,0);
-    pthread_mutex_init(&d_holelock,0);
-
     d_tickinterval=60;
     d_masterschanged=d_slaveschanged=true;
     d_nsock4 = -1;
@@ -164,39 +162,30 @@ public:
   
   void drillHole(const DNSName &domain, const string &ip);
   bool justNotified(const DNSName &domain, const string &ip);
-  void addSuckRequest(const DNSName &domain, const ComboAddress& master);
+  void addSuckRequest(const DNSName &domain, const ComboAddress& master, bool force=false);
   void addSlaveCheckRequest(const DomainInfo& di, const ComboAddress& remote);
   void addTrySuperMasterRequest(const DNSPacket& p);
   void notify(const DNSName &domain, const string &ip);
   void mainloop();
   void retrievalLoopThread();
   void sendNotification(int sock, const DNSName &domain, const ComboAddress& remote, uint16_t id, UeberBackend* B);
-
-  static void *launchhelper(void *p)
-  {
-    static_cast<CommunicatorClass *>(p)->mainloop();
-    return 0;
-  }
-  static void *retrieveLaunchhelper(void *p)
-  {
-    static_cast<CommunicatorClass *>(p)->retrievalLoopThread();
-    return 0;
-  }
   bool notifyDomain(const DNSName &domain, UeberBackend* B);
+  vector<pair<DNSName, ComboAddress> > getSuckRequests();
+  size_t getSuckRequestsWaiting();
 private:
   void loadArgsIntoSet(const char *listname, set<string> &listset);
   void makeNotifySockets();
   void queueNotifyDomain(const DomainInfo& di, UeberBackend* B);
   int d_nsock4, d_nsock6;
   map<pair<DNSName,string>,time_t>d_holes;
-  pthread_mutex_t d_holelock;
-  void suck(const DNSName &domain, const ComboAddress& remote);
+  std::mutex d_holelock;
+  void suck(const DNSName &domain, const ComboAddress& remote, bool force=false);
   void ixfrSuck(const DNSName &domain, const TSIGTriplet& tt, const ComboAddress& laddr, const ComboAddress& remote, std::unique_ptr<AuthLua4>& pdl,
                 ZoneStatus& zs, vector<DNSRecord>* axfr);
 
   void slaveRefresh(PacketHandler *P);
   void masterUpdateCheck(PacketHandler *P);
-  pthread_mutex_t d_lock;
+  std::mutex d_lock;
   
   UniQueue d_suckdomains;
   set<DNSName> d_inprogress;
@@ -232,7 +221,7 @@ private:
     ~RemoveSentinel()
     {
       try {
-        Lock l(&d_cc->d_lock);
+        std::lock_guard<std::mutex> l(d_cc->d_lock);
         d_cc->d_inprogress.erase(d_dn);
       }
       catch(...) {

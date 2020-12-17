@@ -42,7 +42,7 @@
 
 CoProcess::CoProcess(const string &command,int timeout, int infd, int outfd): d_infd(infd), d_outfd(outfd), d_timeout(timeout)
 {
-  split(d_params, command, is_any_of(" "));
+  split(d_params, command, boost::is_any_of(" "));
 
   d_argv.resize(d_params.size()+1);
   d_argv[d_params.size()]=nullptr;
@@ -206,7 +206,7 @@ void CoProcess::receive(string &received)
   }
 
   received.resize(eolPos);
-  trim_right(received);
+  boost::trim_right(received);
 }
 
 void CoProcess::sendReceive(const string &snd, string &rcv)
@@ -232,12 +232,7 @@ UnixRemote::UnixRemote(const string& path, int timeout)
   if(connect(d_fd, (struct sockaddr*)&remote, sizeof(remote)) < 0)
     unixDie("Unable to connect to remote '"+path+"' using UNIX domain socket");
 
-  d_fp = fdopen(d_fd, "r");
-}
-
-UnixRemote::~UnixRemote()
-{
-  fclose(d_fp);
+  d_fp = std::unique_ptr<FILE, int(*)(FILE*)>(fdopen(d_fd, "r"), fclose);
 }
 
 void UnixRemote::send(const string& line)
@@ -250,8 +245,8 @@ void UnixRemote::send(const string& line)
 void UnixRemote::receive(string& line)
 {
   line.clear();
-  stringfgets(d_fp, line);
-  trim_right(line);
+  stringfgets(d_fp.get(), line);
+  boost::trim_right(line);
 }
 
 void UnixRemote::sendReceive(const string &snd, string &rcv)

@@ -71,15 +71,13 @@ private:
     std::atomic<time_t> lastAccess{0};
   };
 
-  pthread_rwlock_t d_lock;
+  ReadWriteLock d_lock;
 public:
   IsUpOracle()
   {
-    pthread_rwlock_init(&d_lock, nullptr);
   }
   ~IsUpOracle()
   {
-    pthread_rwlock_destroy(&d_lock);
   }
   bool isUp(const ComboAddress& remote, const opts_t& opts);
   bool isUp(const ComboAddress& remote, const std::string& url, const opts_t& opts);
@@ -284,7 +282,7 @@ bool doCompare(const T& var, const std::string& res, const C& cmp)
 }
 
 
-std::string getGeo(const std::string& ip, GeoIPInterface::GeoIPQueryAttribute qa)
+static std::string getGeo(const std::string& ip, GeoIPInterface::GeoIPQueryAttribute qa)
 {
   static bool initialized;
   extern std::function<std::string(const std::string& ip, int)> g_getGeo;
@@ -344,6 +342,10 @@ static ComboAddress pickwhashed(const ComboAddress& bestwho, vector<pair<int,Com
     sum += i.first;
     pick.push_back({sum, i.second});
   }
+  if (sum == 0) {
+    /* we should not have any weight of zero, but better safe than sorry */
+    return ComboAddress();
+  }
   ComboAddress::addressOnlyHash aoh;
   int r = aoh(bestwho) % sum;
   auto p = upper_bound(pick.begin(), pick.end(), r, [](int rarg, const decltype(pick)::value_type& a) { return rarg < a.first; });
@@ -368,7 +370,7 @@ static bool getLatLon(const std::string& ip, string& loc)
   double latsec, lonsec;
   char lathem='X', lonhem='X';
 
-  double lat, lon;
+  double lat = 0, lon = 0;
   if(!getLatLon(ip, lat, lon))
     return false;
 
@@ -527,12 +529,12 @@ typedef struct AuthLuaRecordContext
 
 static thread_local unique_ptr<lua_record_ctx_t> s_lua_record_ctx;
 
-void setupLuaRecords()
+static void setupLuaRecords()
 {
   LuaContext& lua = *s_LUA->getLua();
 
   lua.writeFunction("latlon", []() {
-      double lat, lon;
+      double lat = 0, lon = 0;
       getLatLon(s_lua_record_ctx->bestwho.toString(), lat, lon);
       return std::to_string(lat)+" "+std::to_string(lon);
     });
@@ -559,7 +561,7 @@ void setupLuaRecords()
       auto labels= s_lua_record_ctx->qname.getRawLabels();
       if(labels.size()<4)
         return std::string("unknown");
-      double lat, lon;
+      double lat = 0, lon = 0;
       getLatLon(labels[3]+"."+labels[2]+"."+labels[1]+"."+labels[0], lat, lon);
       return std::to_string(lat)+" "+std::to_string(lon);
     });
@@ -604,21 +606,47 @@ void setupLuaRecords()
       return std::string("error");
     });
   lua.writeFunction("createForward", []() {
+      static string allZerosIP("0.0.0.0");
       DNSName rel=s_lua_record_ctx->qname.makeRelative(s_lua_record_ctx->zone);
+      // parts is something like ["1", "2", "3", "4", "static"] or
+      // ["1", "2", "3", "4"] or ["ip40414243", "ip-addresses", ...]
       auto parts = rel.getRawLabels();
-      if(parts.size()==4)
-        return parts[0]+"."+parts[1]+"."+parts[2]+"."+parts[3];
-      if(parts.size()==1) {
+      // Yes, this still breaks if an 1-2-3-4.XXXX is nested too deeply...
+      if(parts.size()>=4) {
+        try {
+          ComboAddress ca(parts[0]+"."+parts[1]+"."+parts[2]+"."+parts[3]);
+          return ca.toString();
+        } catch (const PDNSException &e) {
+          return allZerosIP;
+        }
+      } else if (parts.size() >= 1) {
         // either hex string, or 12-13-14-15
-        //        cout<<parts[0]<<endl;
+        vector<string> ip_parts;
+        stringtok(ip_parts, parts[0], "-");
         unsigned int x1, x2, x3, x4;
-        if(sscanf(parts[0].c_str()+2, "%02x%02x%02x%02x", &x1, &x2, &x3, &x4)==4) {
+        if (ip_parts.size() >= 4) {
+          // 1-2-3-4 with any prefix (e.g. ip-foo-bar-1-2-3-4)
+          string ret;
+          for (size_t n=4; n > 0; n--) {
+            auto octet = ip_parts[ip_parts.size() - n];
+            try {
+              auto octetVal = std::stol(octet);
+              if (octetVal >= 0 && octetVal <= 255) {
+                ret += ip_parts.at(ip_parts.size() - n) + ".";
+              } else {
+                return allZerosIP;
+              }
+            } catch (const std::exception &e) {
+              return allZerosIP;
+            }
+          }
+          ret.resize(ret.size() - 1); // remove trailing dot after last octet
+          return ret;
+        } else if(parts[0].length() == 10 && sscanf(parts[0].c_str()+2, "%02x%02x%02x%02x", &x1, &x2, &x3, &x4)==4) {
           return std::to_string(x1)+"."+std::to_string(x2)+"."+std::to_string(x3)+"."+std::to_string(x4);
         }
-
-
       }
-      return std::string("0.0.0.0");
+      return allZerosIP;
     });
 
   lua.writeFunction("createForward6", []() {
@@ -658,12 +686,12 @@ void setupLuaRecords()
         for(int i=0; i<8; ++i) {
           if(i)
             together+=":";
-          string quad;
+          string lquad;
           for(int j=0; j <4; ++j) {
-            quad.append(1, labels[31-i*4-j][0]);
+            lquad.append(1, labels[31-i*4-j][0]);
             together += labels[31-i*4-j][0];
           }
-          quads.push_back(quad);
+          quads.push_back(lquad);
         }
         ComboAddress ip6(together,0);
 
@@ -683,8 +711,8 @@ void setupLuaRecords()
           fmt % labels[i];
         fmt % dashed;
 
-        for(const auto& quad : quads)
-          fmt % quad;
+        for(const auto& lquad : quads)
+          fmt % lquad;
 
         return fmt.str();
       }
@@ -701,7 +729,7 @@ void setupLuaRecords()
    * Simplistic test to see if an IP address listens on a certain port
    * Will return a single IP address from the set of available IP addresses. If
    * no IP address is available, will return a random element of the set of
-   * addresses suppplied for testing.
+   * addresses supplied for testing.
    *
    * @example ifportup(443, { '1.2.3.4', '5.4.3.2' })"
    */
@@ -889,15 +917,22 @@ void setupLuaRecords()
 
 
   lua.writeFunction("include", [&lua](string record) {
+      DNSName rec;
       try {
-        vector<DNSZoneRecord> drs = lookup(DNSName(record) + s_lua_record_ctx->zone, QType::LUA, s_lua_record_ctx->zoneid);
+        rec = DNSName(record) + s_lua_record_ctx->zone;
+      } catch (const std::exception &e){
+        g_log<<Logger::Error<<"Included record cannot be loaded, the name ("<<record<<") is malformed: "<<e.what()<<endl;
+        return;
+      }
+      try {
+        vector<DNSZoneRecord> drs = lookup(rec, QType::LUA, s_lua_record_ctx->zoneid);
         for(const auto& dr : drs) {
           auto lr = getRR<LUARecordContent>(dr.dr);
           lua.executeCode(lr->getCode());
         }
       }
       catch(std::exception& e) {
-        g_log<<Logger::Error<<"Failed to load include record for LUArecord "<<(DNSName(record)+s_lua_record_ctx->zone)<<": "<<e.what()<<endl;
+        g_log<<Logger::Error<<"Failed to load include record for LUArecord "<<rec<<": "<<e.what()<<endl;
       }
     });
 }

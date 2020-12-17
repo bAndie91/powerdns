@@ -97,7 +97,9 @@ struct DOHFrontend
 
   HTTPVersionStats d_http1Stats;
   HTTPVersionStats d_http2Stats;
+  uint32_t d_internalPipeBufferSize{0};
   bool d_sendCacheControlHeaders{true};
+  bool d_trustForwardedForHeader{false};
 
   time_t getTicketsKeyRotationDelay() const
   {
@@ -174,20 +176,30 @@ struct DOHUnit
   void release()
   {
     if (--d_refcnt == 0) {
+      if (self) {
+        *self = nullptr;
+      }
+
       delete this;
     }
   }
 
+  std::vector<std::pair<std::string, std::string>> headers;
   std::string query;
   std::string response;
+  std::string sni;
+  std::string path;
+  std::string scheme;
+  std::string host;
   ComboAddress remote;
   ComboAddress dest;
   st_h2o_req_t* req{nullptr};
   DOHUnit** self{nullptr};
+  DOHServerConfig* dsc{nullptr};
   std::string contentType;
   std::atomic<uint64_t> d_refcnt{1};
+  size_t query_at{0};
   int rsock;
-  uint16_t qtype;
   /* the status_code is set from
      processDOHQuery() (which is executed in
      the DOH client thread) so that the correct

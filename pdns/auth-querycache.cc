@@ -35,7 +35,7 @@ AuthQueryCache::AuthQueryCache(size_t mapsCount): d_maps(mapsCount), d_lastclean
 {
   S.declare("query-cache-hit","Number of hits on the query cache");
   S.declare("query-cache-miss","Number of misses on the query cache");
-  S.declare("query-cache-size", "Number of entries in the query cache");
+  S.declare("query-cache-size", "Number of entries in the query cache", StatType::gauge);
   S.declare("deferred-cache-inserts","Amount of cache inserts that were deferred because of maintenance");
   S.declare("deferred-cache-lookup","Amount of cache lookups that were deferred because of maintenance");
 
@@ -47,13 +47,11 @@ AuthQueryCache::AuthQueryCache(size_t mapsCount): d_maps(mapsCount), d_lastclean
 AuthQueryCache::~AuthQueryCache()
 {
   try {
-    vector<WriteLock*> locks;
+    vector<WriteLock> locks;
     for(auto& mc : d_maps) {
-      locks.push_back(new WriteLock(&mc.d_mut));
+      locks.push_back(WriteLock(mc.d_mut));
     }
-    for(auto wl : locks) {
-      delete wl;
-    }
+    locks.clear();
   }
   catch(...) {
   }
@@ -196,7 +194,7 @@ uint64_t AuthQueryCache::purge(const string &match)
 {
   uint64_t delcount = 0;
 
-  if(ends_with(match, "$")) {
+  if(boost::ends_with(match, "$")) {
     delcount = purgeLockedCollectionsVector<NameTag>(d_maps, match);
     *d_statnumentries -= delcount;
   }

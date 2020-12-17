@@ -42,7 +42,6 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <algorithm>
-#include <boost/optional.hpp>
 #include <poll.h>
 #include <iomanip>
 #include <netinet/tcp.h>
@@ -57,6 +56,7 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <grp.h>
+#include <limits.h>
 #ifdef __FreeBSD__
 #  include <pthread_np.h>
 #endif
@@ -64,8 +64,6 @@
 #  include <pthread.h>
 #  include <sched.h>
 #endif
-
-bool g_singleThreaded;
 
 size_t writen2(int fd, const void *buf, size_t count)
 {
@@ -441,17 +439,6 @@ string humanDuration(time_t passed)
   return ret.str();
 }
 
-DTime::DTime()
-{
-//  set(); // saves lots of gettimeofday calls
-  d_set.tv_sec=d_set.tv_usec=0;
-}
-
-time_t DTime::time()
-{
-  return d_set.tv_sec;
-}
-
 const string unquotify(const string &item)
 {
   if(item.size()<2)
@@ -585,83 +572,6 @@ string makeHexDump(const string& str)
   return ret;
 }
 
-// shuffle, maintaining some semblance of order
-void shuffle(vector<DNSZoneRecord>& rrs)
-{
-  vector<DNSZoneRecord>::iterator first, second;
-  for(first=rrs.begin();first!=rrs.end();++first)
-    if(first->dr.d_place==DNSResourceRecord::ANSWER && first->dr.d_type != QType::CNAME) // CNAME must come first
-      break;
-  for(second=first;second!=rrs.end();++second)
-    if(second->dr.d_place!=DNSResourceRecord::ANSWER)
-      break;
-
-  if(second-first > 1)
-    random_shuffle(first,second);
-
-  // now shuffle the additional records
-  for(first=second;first!=rrs.end();++first)
-    if(first->dr.d_place==DNSResourceRecord::ADDITIONAL && first->dr.d_type != QType::CNAME) // CNAME must come first
-      break;
-  for(second=first;second!=rrs.end();++second)
-    if(second->dr.d_place!=DNSResourceRecord::ADDITIONAL)
-      break;
-
-  if(second-first>1)
-    random_shuffle(first,second);
-
-  // we don't shuffle the rest
-}
-
-
-// shuffle, maintaining some semblance of order
-void shuffle(vector<DNSRecord>& rrs)
-{
-  vector<DNSRecord>::iterator first, second;
-  for(first=rrs.begin();first!=rrs.end();++first)
-    if(first->d_place==DNSResourceRecord::ANSWER && first->d_type != QType::CNAME) // CNAME must come first
-      break;
-  for(second=first;second!=rrs.end();++second)
-    if(second->d_place!=DNSResourceRecord::ANSWER || second->d_type == QType::RRSIG) // leave RRSIGs at the end
-      break;
-
-  if(second-first>1)
-    random_shuffle(first,second);
-
-  // now shuffle the additional records
-  for(first=second;first!=rrs.end();++first)
-    if(first->d_place==DNSResourceRecord::ADDITIONAL && first->d_type != QType::CNAME) // CNAME must come first
-      break;
-  for(second=first; second!=rrs.end(); ++second)
-    if(second->d_place!=DNSResourceRecord::ADDITIONAL)
-      break;
-
-  if(second-first>1)
-    random_shuffle(first,second);
-
-  // we don't shuffle the rest
-}
-
-static uint16_t mapTypesToOrder(uint16_t type)
-{
-  if(type == QType::CNAME)
-    return 0;
-  if(type == QType::RRSIG)
-    return 65535;
-  else
-    return 1;
-}
-
-// make sure rrs is sorted in d_place order to avoid surprises later
-// then shuffle the parts that desire shuffling
-void orderAndShuffle(vector<DNSRecord>& rrs)
-{
-  std::stable_sort(rrs.begin(), rrs.end(), [](const DNSRecord&a, const DNSRecord& b) { 
-      return std::make_tuple(a.d_place, mapTypesToOrder(a.d_type)) < std::make_tuple(b.d_place, mapTypesToOrder(b.d_type));
-    });
-  shuffle(rrs);
-}
-
 void normalizeTV(struct timeval& tv)
 {
   if(tv.tv_usec > 1000000) {
@@ -777,9 +687,8 @@ int makeIPv6sockaddr(const std::string& addr, struct sockaddr_in6* ret)
     hints.ai_family = AF_INET6;
     hints.ai_flags = AI_NUMERICHOST;
 
-    int error;
     // getaddrinfo has anomalous return codes, anything nonzero is an error, positive or negative
-    if((error=getaddrinfo(ourAddr.c_str(), 0, &hints, &res))) {
+    if (getaddrinfo(ourAddr.c_str(), 0, &hints, &res) != 0) {
       return -1;
     }
 
@@ -1197,7 +1106,9 @@ string getMACAddress(const ComboAddress& ca)
       if(parts.size() < 4)
         return ret;
       unsigned int tmp[6];
-      sscanf(parts[3].c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", tmp, tmp+1, tmp+2, tmp+3, tmp+4, tmp+5);
+      if (sscanf(parts[3].c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", tmp, tmp+1, tmp+2, tmp+3, tmp+4, tmp+5) != 6) {
+        return ret;
+      }
       for(int i = 0 ; i< 6 ; ++i)
         ret.append(1, (char)tmp[i]);
       return ret;
@@ -1556,7 +1467,7 @@ std::vector<ComboAddress> getResolvers(const std::string& resolvConfPath)
 
   string line;
   while(std::getline(ifs, line)) {
-    boost::trim_right_if(line, is_any_of(" \r\n\x1a"));
+    boost::trim_right_if(line, boost::is_any_of(" \r\n\x1a"));
     boost::trim_left(line); // leading spaces, let's be nice
 
     string::size_type tpos = line.find_first_of(";#");
@@ -1598,7 +1509,7 @@ size_t getPipeBufferSize(int fd)
 bool setPipeBufferSize(int fd, size_t size)
 {
 #ifdef F_SETPIPE_SZ
-  if (size > std::numeric_limits<int>::max()) {
+  if (size > static_cast<size_t>(std::numeric_limits<int>::max())) {
     errno = EINVAL;
     return false;
   }
@@ -1612,4 +1523,63 @@ bool setPipeBufferSize(int fd, size_t size)
   errno = ENOSYS;
   return false;
 #endif /* F_SETPIPE_SZ */
+}
+
+DNSName reverseNameFromIP(const ComboAddress& ip)
+{
+  if (ip.isIPv4()) {
+    std::string result("in-addr.arpa.");
+    auto ptr = reinterpret_cast<const uint8_t*>(&ip.sin4.sin_addr.s_addr);
+    for (size_t idx = 0; idx < sizeof(ip.sin4.sin_addr.s_addr); idx++) {
+      result = std::to_string(ptr[idx]) + "." + result;
+    }
+    return DNSName(result);
+  }
+  else if (ip.isIPv6()) {
+    std::string result("ip6.arpa.");
+    auto ptr = reinterpret_cast<const uint8_t*>(&ip.sin6.sin6_addr.s6_addr[0]);
+    for (size_t idx = 0; idx < sizeof(ip.sin6.sin6_addr.s6_addr); idx++) {
+      std::stringstream stream;
+      stream << std::hex << (ptr[idx] & 0x0F);
+      stream << '.';
+      stream << std::hex << (((ptr[idx]) >> 4) & 0x0F);
+      stream << '.';
+      result = stream.str() + result;
+    }
+    return DNSName(result);
+  }
+
+  throw std::runtime_error("Calling reverseNameFromIP() for an address which is neither an IPv4 nor an IPv6");
+}
+
+static size_t getMaxHostNameSize()
+{
+#if defined(HOST_NAME_MAX)
+  return HOST_NAME_MAX;
+#endif
+
+#if defined(_SC_HOST_NAME_MAX)
+  auto tmp = sysconf(_SC_HOST_NAME_MAX);
+  if (tmp != -1) {
+    return tmp;
+  }
+#endif
+
+  /* _POSIX_HOST_NAME_MAX */
+  return 255;
+}
+
+std::string getCarbonHostName()
+{
+  std::string hostname;
+  hostname.resize(getMaxHostNameSize() + 1, 0);
+
+  if (gethostname(const_cast<char*>(hostname.c_str()), hostname.size()) != 0) {
+    throw std::runtime_error(stringerror());
+  }
+
+  boost::replace_all(hostname, ".", "_");
+  hostname.resize(strlen(hostname.c_str()));
+
+  return hostname;
 }

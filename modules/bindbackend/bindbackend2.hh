@@ -187,7 +187,7 @@ public:
   void getAllDomains(vector<DomainInfo> *domains, bool include_disabled=false) override;
 
   static DNSBackend *maker();
-  static pthread_mutex_t s_startup_lock;
+  static std::mutex s_startup_lock;
 
   void setFresh(uint32_t domain_id) override;
   void setNotified(uint32_t id, uint32_t serial) override;
@@ -221,7 +221,7 @@ public:
 					       ordered_unique<tag<NameTag>, member<BB2DomainInfo, DNSName, &BB2DomainInfo::d_name> >
 					       > > state_t;
   static state_t s_state;
-  static pthread_rwlock_t s_state_lock;
+  static ReadWriteLock s_state_lock;
 
   void parseZoneFile(BB2DomainInfo *bbd);
   void rediscover(string *status=nullptr) override;
@@ -229,7 +229,7 @@ public:
 
   // for supermaster support
   bool superMasterBackend(const string &ip, const DNSName &domain, const vector<DNSResourceRecord>&nsset, string *nameserver, string *account, DNSBackend **db) override;
-  static pthread_mutex_t s_supermaster_config_lock;
+  static std::mutex s_supermaster_config_lock;
   bool createSlaveDomain(const string &ip, const DNSName &domain, const string &nameserver, const string &account) override;
 
 private:
@@ -288,6 +288,7 @@ private:
   unique_ptr<SSqlStatement> d_deleteTSIGKeyQuery_stmt;
   unique_ptr<SSqlStatement> d_getTSIGKeysQuery_stmt;
 
+  DNSName d_transaction_qname;
   string d_transaction_tmpname;
   string d_logprefix;
   set<string> alsoNotify; //!< this is used to store the also-notify list of interested peers.
@@ -298,6 +299,7 @@ private:
   int d_transaction_id;
   static bool s_ignore_broken_records;
   bool d_hybrid;
+  bool d_upgradeContent;
 
   BB2DomainInfo createDomainEntry(const DNSName& domain, const string &filename); //!< does not insert in s_state
 

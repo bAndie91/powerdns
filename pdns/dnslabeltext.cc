@@ -7,6 +7,8 @@
 #include <string>
 #include "dnsname.hh"
 #include "namespaces.hh"
+#include "dnswriter.hh"
+#include "misc.hh"
 
 namespace {
 void appendSplit(vector<string>& ret, string& segment, char c)
@@ -24,7 +26,7 @@ vector<string> segmentDNSText(const string& input )
 {
   // cerr<<"segmentDNSText("<<input<<")"<<endl; 
 
-#line 28 "dnslabeltext.cc"
+#line 30 "dnslabeltext.cc"
 static const char _dnstext_actions[] = {
 	0, 1, 0, 1, 1, 1, 2, 1, 
 	3, 1, 4, 1, 5, 2, 0, 1, 
@@ -81,7 +83,7 @@ static const int dnstext_error = 0;
 static const int dnstext_en_main = 1;
 
 
-#line 28 "dnslabeltext.rl"
+#line 30 "dnslabeltext.rl"
 
 	(void)dnstext_error;  // silence warnings
 	(void)dnstext_en_main;
@@ -94,12 +96,12 @@ static const int dnstext_en_main = 1;
         vector<string> ret;
 
         
-#line 98 "dnslabeltext.cc"
+#line 100 "dnslabeltext.cc"
 	{
 	cs = dnstext_start;
 	}
 
-#line 103 "dnslabeltext.cc"
+#line 105 "dnslabeltext.cc"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -173,27 +175,27 @@ _match:
 		switch ( *_acts++ )
 		{
 	case 0:
-#line 40 "dnslabeltext.rl"
+#line 42 "dnslabeltext.rl"
 	{ 
                         ret.push_back(segment);
                         segment.clear();
                 }
 	break;
 	case 1:
-#line 44 "dnslabeltext.rl"
+#line 46 "dnslabeltext.rl"
 	{ 
                         segment.clear();
                 }
 	break;
 	case 2:
-#line 48 "dnslabeltext.rl"
+#line 50 "dnslabeltext.rl"
 	{
                   char c = *p;
                   appendSplit(ret, segment, c);
                 }
 	break;
 	case 3:
-#line 52 "dnslabeltext.rl"
+#line 54 "dnslabeltext.rl"
 	{
                   char c = *p;
                   val *= 10;
@@ -202,19 +204,19 @@ _match:
                 }
 	break;
 	case 4:
-#line 58 "dnslabeltext.rl"
+#line 60 "dnslabeltext.rl"
 	{
                   appendSplit(ret, segment, val);
                   val=0;
                 }
 	break;
 	case 5:
-#line 63 "dnslabeltext.rl"
+#line 65 "dnslabeltext.rl"
 	{
                   appendSplit(ret, segment, *(p));
                 }
 	break;
-#line 218 "dnslabeltext.cc"
+#line 220 "dnslabeltext.cc"
 		}
 	}
 
@@ -231,13 +233,13 @@ _again:
 	while ( __nacts-- > 0 ) {
 		switch ( *__acts++ ) {
 	case 0:
-#line 40 "dnslabeltext.rl"
+#line 42 "dnslabeltext.rl"
 	{ 
                         ret.push_back(segment);
                         segment.clear();
                 }
 	break;
-#line 241 "dnslabeltext.cc"
+#line 243 "dnslabeltext.cc"
 		}
 	}
 	}
@@ -245,7 +247,7 @@ _again:
 	_out: {}
 	}
 
-#line 76 "dnslabeltext.rl"
+#line 78 "dnslabeltext.rl"
 
 
         if ( cs < dnstext_first_final ) {
@@ -259,7 +261,7 @@ _again:
 DNSName::string_t segmentDNSNameRaw(const char* realinput, size_t inputlen)
 {
 
-#line 263 "dnslabeltext.cc"
+#line 265 "dnslabeltext.cc"
 static const char _dnsnameraw_actions[] = {
 	0, 1, 0, 1, 1, 1, 2, 1, 
 	3, 1, 4, 1, 5, 2, 1, 5, 
@@ -310,7 +312,7 @@ static const int dnsnameraw_error = 0;
 static const int dnsnameraw_en_main = 1;
 
 
-#line 92 "dnslabeltext.rl"
+#line 94 "dnslabeltext.rl"
 
 	(void)dnsnameraw_error;  // silence warnings
 	(void)dnsnameraw_en_main;
@@ -331,12 +333,12 @@ static const int dnsnameraw_en_main = 1;
         char labellen=0;
         unsigned int lenpos=0;
         
-#line 335 "dnslabeltext.cc"
+#line 337 "dnslabeltext.cc"
 	{
 	cs = dnsnameraw_start;
 	}
 
-#line 340 "dnslabeltext.cc"
+#line 342 "dnslabeltext.cc"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -410,7 +412,7 @@ _match:
 		switch ( *_acts++ )
 		{
 	case 0:
-#line 112 "dnslabeltext.rl"
+#line 114 "dnslabeltext.rl"
 	{ 
                         if (labellen < 0 || labellen > 63) {
                           throw runtime_error("Unable to parse DNS name '"+string(realinput)+"': invalid label length "+std::to_string(labellen));
@@ -420,7 +422,7 @@ _match:
                 }
 	break;
 	case 1:
-#line 119 "dnslabeltext.rl"
+#line 121 "dnslabeltext.rl"
 	{ 
                         lenpos=ret.size();
                         ret.append(1, (char)0);
@@ -428,7 +430,7 @@ _match:
                 }
 	break;
 	case 2:
-#line 125 "dnslabeltext.rl"
+#line 127 "dnslabeltext.rl"
 	{
                   char c = *p;
                   ret.append(1, c);
@@ -436,7 +438,7 @@ _match:
                 }
 	break;
 	case 3:
-#line 130 "dnslabeltext.rl"
+#line 132 "dnslabeltext.rl"
 	{
                   char c = *p;
                   val *= 10;
@@ -444,7 +446,7 @@ _match:
                 }
 	break;
 	case 4:
-#line 135 "dnslabeltext.rl"
+#line 137 "dnslabeltext.rl"
 	{
                   ret.append(1, val);
                   labellen++;
@@ -452,13 +454,13 @@ _match:
                 }
 	break;
 	case 5:
-#line 141 "dnslabeltext.rl"
+#line 143 "dnslabeltext.rl"
 	{
                   ret.append(1, *(p));
                   labellen++;
                 }
 	break;
-#line 462 "dnslabeltext.cc"
+#line 464 "dnslabeltext.cc"
 		}
 	}
 
@@ -475,7 +477,7 @@ _again:
 	while ( __nacts-- > 0 ) {
 		switch ( *__acts++ ) {
 	case 0:
-#line 112 "dnslabeltext.rl"
+#line 114 "dnslabeltext.rl"
 	{ 
                         if (labellen < 0 || labellen > 63) {
                           throw runtime_error("Unable to parse DNS name '"+string(realinput)+"': invalid label length "+std::to_string(labellen));
@@ -485,14 +487,14 @@ _again:
                 }
 	break;
 	case 4:
-#line 135 "dnslabeltext.rl"
+#line 137 "dnslabeltext.rl"
 	{
                   ret.append(1, val);
                   labellen++;
                   val=0;
                 }
 	break;
-#line 496 "dnslabeltext.cc"
+#line 498 "dnslabeltext.cc"
 		}
 	}
 	}
@@ -500,7 +502,7 @@ _again:
 	_out: {}
 	}
 
-#line 162 "dnslabeltext.rl"
+#line 164 "dnslabeltext.rl"
 
 
         if ( cs < dnsnameraw_first_final ) {
@@ -509,6 +511,224 @@ _again:
         ret.append(1, (char)0);
         return ret;
 };
+
+// Reads an RFC 1035 character string from 'in', puts the resulting bytes in 'out'.
+// Returns the amount of bytes read from 'in'
+size_t parseRFC1035CharString(const std::string &in, std::string &val) {
+
+  val.clear();
+  val.reserve(in.size());
+  const char *p = in.c_str();
+  const char *pe = p + in.size();
+  int cs = 0;
+  uint8_t escaped_octet = 0;
+  // Keeps track of how many chars we read from the source string
+  size_t counter=0;
+
+/* This parses an RFC 1035 char-string.
+ * It was created from the ABNF in draft-ietf-dnsop-svcb-https-02 with
+ * https://github.com/zinid/abnfc and modified to put all the characters in the
+ * right place.
+ */
+
+#line 535 "dnslabeltext.cc"
+static const char _dns_text_to_string_actions[] = {
+	0, 1, 0, 1, 2, 1, 3, 2, 
+	0, 1
+};
+
+static const char _dns_text_to_string_key_offsets[] = {
+	0, 0, 8, 15, 17, 19, 22, 24, 
+	33, 41, 43, 45, 48, 50, 58
+};
+
+static const char _dns_text_to_string_trans_keys[] = {
+	34, 92, 33, 39, 42, 58, 60, 126, 
+	50, 33, 47, 48, 49, 58, 126, 48, 
+	57, 48, 57, 53, 48, 52, 48, 53, 
+	9, 34, 92, 32, 39, 42, 58, 60, 
+	126, 9, 50, 32, 47, 48, 49, 58, 
+	126, 48, 57, 48, 57, 53, 48, 52, 
+	48, 53, 33, 92, 35, 39, 42, 58, 
+	60, 126, 0
+};
+
+static const char _dns_text_to_string_single_lengths[] = {
+	0, 2, 1, 0, 0, 1, 0, 3, 
+	2, 0, 0, 1, 0, 2, 0
+};
+
+static const char _dns_text_to_string_range_lengths[] = {
+	0, 3, 3, 1, 1, 1, 1, 3, 
+	3, 1, 1, 1, 1, 3, 0
+};
+
+static const char _dns_text_to_string_index_offsets[] = {
+	0, 0, 6, 11, 13, 15, 18, 20, 
+	27, 33, 35, 37, 40, 42, 48
+};
+
+static const char _dns_text_to_string_indicies[] = {
+	2, 3, 0, 0, 0, 1, 5, 0, 
+	4, 0, 1, 6, 1, 7, 1, 8, 
+	6, 1, 7, 1, 9, 10, 11, 9, 
+	9, 9, 1, 9, 13, 9, 12, 9, 
+	1, 14, 1, 15, 1, 16, 14, 1, 
+	15, 1, 0, 3, 0, 0, 0, 1, 
+	1, 0
+};
+
+static const char _dns_text_to_string_trans_targs[] = {
+	13, 0, 7, 2, 3, 5, 4, 13, 
+	6, 7, 14, 8, 9, 11, 10, 7, 
+	12
+};
+
+static const char _dns_text_to_string_trans_actions[] = {
+	3, 0, 5, 5, 1, 1, 1, 7, 
+	1, 3, 5, 5, 1, 1, 1, 7, 
+	1
+};
+
+static const int dns_text_to_string_start = 1;
+static const int dns_text_to_string_first_final = 13;
+static const int dns_text_to_string_error = 0;
+
+static const int dns_text_to_string_en_main = 1;
+
+
+#line 601 "dnslabeltext.cc"
+	{
+	cs = dns_text_to_string_start;
+	}
+
+#line 232 "dnslabeltext.rl"
+
+
+  // silence warnings
+  (void) dns_text_to_string_first_final;
+  (void) dns_text_to_string_error;
+  (void) dns_text_to_string_en_main;
+  
+#line 614 "dnslabeltext.cc"
+	{
+	int _klen;
+	unsigned int _trans;
+	const char *_acts;
+	unsigned int _nacts;
+	const char *_keys;
+
+	if ( p == pe )
+		goto _test_eof;
+	if ( cs == 0 )
+		goto _out;
+_resume:
+	_keys = _dns_text_to_string_trans_keys + _dns_text_to_string_key_offsets[cs];
+	_trans = _dns_text_to_string_index_offsets[cs];
+
+	_klen = _dns_text_to_string_single_lengths[cs];
+	if ( _klen > 0 ) {
+		const char *_lower = _keys;
+		const char *_mid;
+		const char *_upper = _keys + _klen - 1;
+		while (1) {
+			if ( _upper < _lower )
+				break;
+
+			_mid = _lower + ((_upper-_lower) >> 1);
+			if ( (*p) < *_mid )
+				_upper = _mid - 1;
+			else if ( (*p) > *_mid )
+				_lower = _mid + 1;
+			else {
+				_trans += (unsigned int)(_mid - _keys);
+				goto _match;
+			}
+		}
+		_keys += _klen;
+		_trans += _klen;
+	}
+
+	_klen = _dns_text_to_string_range_lengths[cs];
+	if ( _klen > 0 ) {
+		const char *_lower = _keys;
+		const char *_mid;
+		const char *_upper = _keys + (_klen<<1) - 2;
+		while (1) {
+			if ( _upper < _lower )
+				break;
+
+			_mid = _lower + (((_upper-_lower) >> 1) & ~1);
+			if ( (*p) < _mid[0] )
+				_upper = _mid - 2;
+			else if ( (*p) > _mid[1] )
+				_lower = _mid + 2;
+			else {
+				_trans += (unsigned int)((_mid - _keys)>>1);
+				goto _match;
+			}
+		}
+		_trans += _klen;
+	}
+
+_match:
+	_trans = _dns_text_to_string_indicies[_trans];
+	cs = _dns_text_to_string_trans_targs[_trans];
+
+	if ( _dns_text_to_string_trans_actions[_trans] == 0 )
+		goto _again;
+
+	_acts = _dns_text_to_string_actions + _dns_text_to_string_trans_actions[_trans];
+	_nacts = (unsigned int) *_acts++;
+	while ( _nacts-- > 0 )
+	{
+		switch ( *_acts++ )
+		{
+	case 0:
+#line 194 "dnslabeltext.rl"
+	{
+    escaped_octet *= 10;
+    escaped_octet += (*p)-'0';
+    counter++;
+  }
+	break;
+	case 1:
+#line 200 "dnslabeltext.rl"
+	{
+    val += escaped_octet;
+    escaped_octet = 0;
+  }
+	break;
+	case 2:
+#line 205 "dnslabeltext.rl"
+	{
+    val += (*p);
+    counter++;
+  }
+	break;
+	case 3:
+#line 210 "dnslabeltext.rl"
+	{
+    counter++;
+  }
+	break;
+#line 716 "dnslabeltext.cc"
+		}
+	}
+
+_again:
+	if ( cs == 0 )
+		goto _out;
+	if ( ++p != pe )
+		goto _resume;
+	_test_eof: {}
+	_out: {}
+	}
+
+#line 239 "dnslabeltext.rl"
+
+  return counter;
+}
 
 
 

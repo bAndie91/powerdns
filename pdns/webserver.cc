@@ -81,21 +81,43 @@ bool HttpRequest::compareHeader(const string &header_name, const string &expecte
   return (0==strcmp(header->second.c_str(), expected_value.c_str()));
 }
 
-
-void HttpResponse::setBody(const json11::Json& document)
+void HttpResponse::setPlainBody(const string& document)
 {
+  this->headers["Content-Type"] = "text/plain; charset=utf-8";
+
+  this->body = document;
+}
+
+void HttpResponse::setYamlBody(const string& document)
+{
+  this->headers["Content-Type"] = "application/x-yaml";
+
+  this->body = document;
+}
+
+void HttpResponse::setJsonBody(const string& document)
+{
+  this->headers["Content-Type"] = "application/json";
+
+  this->body = document;
+}
+
+void HttpResponse::setJsonBody(const json11::Json& document)
+{
+  this->headers["Content-Type"] = "application/json";
+
   document.dump(this->body);
 }
 
 void HttpResponse::setErrorResult(const std::string& message, const int status_)
 {
-  setBody(json11::Json::object { { "error", message } });
+  setJsonBody(json11::Json::object { { "error", message } });
   this->status = status_;
 }
 
 void HttpResponse::setSuccessResult(const std::string& message, const int status_)
 {
-  setBody(json11::Json::object { { "result", message } });
+  setJsonBody(json11::Json::object { { "result", message } });
   this->status = status_;
 }
 
@@ -107,7 +129,7 @@ static void bareHandlerWrapper(WebServer::HandlerFunction handler, YaHTTP::Reque
 
 void WebServer::registerBareHandler(const string& url, HandlerFunction handler)
 {
-  YaHTTP::THandlerFunction f = boost::bind(&bareHandlerWrapper, handler, _1, _2);
+  YaHTTP::THandlerFunction f = [=](YaHTTP::Request* req, YaHTTP::Response* resp){return bareHandlerWrapper(handler, req, resp);};
   YaHTTP::Router::Any(url, f);
 }
 
@@ -150,8 +172,6 @@ void WebServer::apiWrapper(WebServer::HandlerFunction handler, HttpRequest* req,
     throw HttpUnauthorizedException("X-API-Key");
   }
 
-  resp->headers["Content-Type"] = "application/json";
-
   // security headers
   resp->headers["X-Content-Type-Options"] = "nosniff";
   resp->headers["X-Frame-Options"] = "deny";
@@ -179,7 +199,7 @@ void WebServer::apiWrapper(WebServer::HandlerFunction handler, HttpRequest* req,
 }
 
 void WebServer::registerApiHandler(const string& url, HandlerFunction handler, bool allowPassword) {
-  HandlerFunction f = boost::bind(&WebServer::apiWrapper, this, handler, _1, _2, allowPassword);
+  HandlerFunction f = std::bind(&WebServer::apiWrapper, this, handler, std::placeholders::_1, std::placeholders::_2, allowPassword);
   registerBareHandler(url, f);
 }
 
@@ -196,7 +216,7 @@ void WebServer::webWrapper(WebServer::HandlerFunction handler, HttpRequest* req,
 }
 
 void WebServer::registerWebHandler(const string& url, HandlerFunction handler) {
-  HandlerFunction f = boost::bind(&WebServer::webWrapper, this, handler, _1, _2);
+  HandlerFunction f = std::bind(&WebServer::webWrapper, this, handler, std::placeholders::_1, std::placeholders::_2);
   registerBareHandler(url, f);
 }
 
@@ -233,8 +253,12 @@ void WebServer::handleRequest(HttpRequest& req, HttpResponse& resp) const
     YaHTTP::strstr_map_t::iterator header;
 
     if ((header = req.headers.find("accept")) != req.headers.end()) {
-      // json wins over html
-      if (header->second.find("application/json") != std::string::npos) {
+      // yaml wins over json, json wins over html
+      if (header->second.find("application/x-yaml") != std::string::npos) {
+        req.accept_yaml = true;
+      } else if (header->second.find("text/x-yaml") != std::string::npos) {
+        req.accept_yaml = true;
+      } else if (header->second.find("application/json") != std::string::npos) {
         req.accept_json = true;
       } else if (header->second.find("text/html") != std::string::npos) {
         req.accept_html = true;
@@ -272,14 +296,14 @@ void WebServer::handleRequest(HttpRequest& req, HttpResponse& resp) const
     // TODO rm this logline?
     g_log<<Logger::Debug<<req.logprefix<<"Error result for \"" << req.url.path << "\": " << resp.status << endl;
     string what = YaHTTP::Utility::status2text(resp.status);
-    if(req.accept_html) {
-      resp.headers["Content-Type"] = "text/html; charset=utf-8";
-      resp.body = "<!html><title>" + what + "</title><h1>" + what + "</h1>";
-    } else if (req.accept_json) {
+    if (req.accept_json) {
       resp.headers["Content-Type"] = "application/json";
       if (resp.body.empty()) {
         resp.setErrorResult(what, resp.status);
       }
+    } else if (req.accept_html) {
+      resp.headers["Content-Type"] = "text/html; charset=utf-8";
+      resp.body = "<!html><title>" + what + "</title><h1>" + what + "</h1>";
     } else {
       resp.headers["Content-Type"] = "text/plain; charset=utf-8";
       resp.body = what;

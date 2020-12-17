@@ -1,6 +1,6 @@
 AC_PREREQ([2.61])
 
-AC_INIT([pdns], [4.3.1])
+AC_INIT([pdns], [4.4.0])
 
 AC_CONFIG_SRCDIR([pdns/receiver.cc])
 AC_CONFIG_MACRO_DIR([m4])
@@ -18,8 +18,8 @@ AM_SILENT_RULES([yes])
 
 AC_CANONICAL_HOST
 # Add some default CFLAGS and CXXFLAGS, can be appended to using the environment variables
-CFLAGS="-g -O2 -Wall -Wextra -Wshadow -Wno-unused-parameter $CFLAGS"
-CXXFLAGS="-g -O2 -Wall -Wextra -Wshadow -Wno-unused-parameter $CXXFLAGS"
+CFLAGS="-g -O2 -Wall -Wextra -Wshadow -Wno-unused-parameter -Wmissing-declarations -Wredundant-decls $CFLAGS"
+CXXFLAGS="-std=c++11 -g -O2 -Wall -Wextra -Wshadow -Wno-unused-parameter -Wmissing-declarations -Wredundant-decls $CXXFLAGS"
 
 AC_PROG_CC
 AM_PROG_CC_C_O
@@ -48,7 +48,7 @@ PTHREAD_SET_NAME
 PDNS_WITH_LUA([mandatory])
 PDNS_CHECK_LUA_HPP
 
-AX_CXX_COMPILE_STDCXX_11
+AX_CXX_COMPILE_STDCXX_11([noext], [mandatory])
 
 AC_MSG_CHECKING([whether we will enable compiler security checks])
 AC_ARG_ENABLE([hardening],
@@ -126,7 +126,22 @@ PDNS_ENABLE_FUZZ_TARGETS
 
 PDNS_WITH_SQLITE3
 
-PDNS_CHECK_VIRTUALENV
+PDNS_CHECK_PYTHON_VENV
+
+AM_CONDITIONAL([HAVE_API_SWAGGER_JSON], [test -e "$srcdir/pdns/api-swagger.json"])
+AM_COND_IF([HAVE_API_SWAGGER_JSON],[],[
+  AM_COND_IF([HAVE_VENV],[],[
+    AC_MSG_ERROR([Python 3 and/or venv module are not available, Authoritative Server cannot be built.])
+  ])
+])
+
+AM_CONDITIONAL([HAVE_MANPAGES], [test -e "$srcdir/docs/pdns_server.1"])
+AM_COND_IF([HAVE_MANPAGES],[],[
+  AM_COND_IF([HAVE_VENV],[],[
+    AC_MSG_WARN([Python 3 and/or venv module are not available, documentation will not be built.])
+  ])
+])
+
 PDNS_FROM_GIT
 
 dnl Checks for library functions.
@@ -144,7 +159,6 @@ AC_SUBST([LIBDL], [$lt_cv_dlopen_libs])
 
 PDNS_ENABLE_VERBOSE_LOGGING
 PDNS_ENABLE_PKCS11
-PDNS_ENABLE_GSS_TSIG
 
 AC_SUBST([socketdir])
 socketdir="/var/run"
@@ -397,9 +411,6 @@ AS_IF([test "x$LUAPC" != "x"],
 ])
 AS_IF([test "x$enable_experimental_pkcs11" = "xyes"],
   [AC_MSG_NOTICE([PKCS-11: yes])]
-)
-AS_IF([test "x$enable_experimental_gss_tsig" = "xyes"],
-  [AC_MSG_NOTICE([GSS-TSIG: yes])]
 )
 AS_IF([test "x$enable_lua_records" = "xyes"],
   [AC_MSG_NOTICE([LUA records: yes])]

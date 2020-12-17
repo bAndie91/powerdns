@@ -33,7 +33,7 @@
 #include "statbag.hh"
 extern StatBag S;
 
-static pthread_rwlock_t g_signatures_lock = PTHREAD_RWLOCK_INITIALIZER;
+static ReadWriteLock g_signatures_lock;
 typedef map<pair<string, string>, string> signaturecache_t;
 static signaturecache_t g_signatures;
 static int g_cacheweekno;
@@ -142,7 +142,7 @@ static void addSignature(DNSSECKeeper& dk, UeberBackend& db, const DNSName& sign
   vector<RRSIGRecordContent> rrcs;
   if(dk.isPresigned(signer)) {
     //cerr<<"Doing presignatures"<<endl;
-    dk.getPreRRSIGs(db, signer, signQName, wildcardname, QType(signQType), signPlace, outsigned, origTTL); // does it all
+    dk.getPreRRSIGs(db, outsigned, origTTL); // does it all
   }
   else {
     if(getRRSIGsForRRSET(dk, signer, wildcardname.countLabels() ? wildcardname : signQName, signQType, signTTL, toSign, rrcs) < 0)  {

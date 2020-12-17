@@ -32,9 +32,8 @@
 #include "dnssecinfra.hh"
 
 #include "dns_random.hh"
-#include "gss_context.hh"
 #include <boost/multi_index_container.hpp>
-#include "resolver.hh"
+#include "axfr-retriever.hh"
 #include <fstream>
 #include "ixfr.hh"
 #include "ixfrutils.hh"
@@ -46,7 +45,7 @@ ArgvMap &arg()
   return theArg;
 }
 
-void usage() {
+static void usage() {
   cerr<<"Syntax: ixplore diff ZONE BEFORE_FILE AFTER_FILE"<<endl;
   cerr<<"Syntax: ixplore track IP-ADDRESS PORT ZONE DIRECTORY [TSIGKEY TSIGALGO TSIGSECRET]"<<endl;
 }

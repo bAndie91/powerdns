@@ -40,7 +40,6 @@
 #include "version.hh"
 #include "namespaces.hh"
 using namespace ::boost::multi_index;
-#include "namespaces.hh"
 
 namespace po = boost::program_options;
 po::variables_map g_vm;
@@ -52,7 +51,7 @@ ArgvMap &arg()
   return arg;
 }
 
-void usage() {
+static void usage() {
   cerr<<"Syntax: pdns_notify IP_ADDRESS/HOSTNAME[:PORT] DOMAIN"<<endl;
 }
 
@@ -97,7 +96,7 @@ try
        parts.push_back("domain");
      else if (parts.size() != 2)
        throw runtime_error("Invalid hostname:port syntax");
-     if (getaddrinfo(parts[0].c_str(), parts[1].c_str(), NULL, &info) < 0)
+     if (getaddrinfo(parts[0].c_str(), parts[1].c_str(), NULL, &info) != 0)
        throw runtime_error("Cannot resolve '" + string(argv[1]) +"'");
      for(auto ptr = info; ptr != NULL; ptr = ptr->ai_next)
        addrs.emplace(ComboAddress{ptr->ai_addr, ptr->ai_addrlen});

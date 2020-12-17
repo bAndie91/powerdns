@@ -12,18 +12,19 @@
 #include <vector>
 #include <algorithm>
 
-// apple compiler somehow has string_view even in c++11!
-#if __cplusplus < 201703L && !defined(__APPLE__)
+#ifdef __cpp_lib_string_view
+using std::string_view;
+#else
 #include <boost/version.hpp>
 #if BOOST_VERSION >= 106100
 #include <boost/utility/string_view.hpp>
 using boost::string_view;
-#else
+#elif BOOST_VERSION >= 105300
 #include <boost/utility/string_ref.hpp>
 using string_view = boost::string_ref;
+#else
+using string_view = std::string;
 #endif
-#else // C++17
-using std::string_view;
 #endif
 
 

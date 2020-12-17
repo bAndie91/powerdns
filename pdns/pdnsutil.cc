@@ -2,6 +2,9 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+
+#include <fcntl.h>
+
 #include "dnsseckeeper.hh"
 #include "dnssecinfra.hh"
 #include "statbag.hh"
@@ -51,7 +54,15 @@ ArgvMap &arg()
   return arg;
 }
 
-void loadMainConfig(const std::string& configdir)
+static std::string comboAddressVecToString(const std::vector<ComboAddress>& vec) {
+  vector<string> strs;
+  for (const auto& ca : vec) {
+    strs.push_back(ca.toStringWithPortExcept(53));
+  }
+  return boost::join(strs, ",");
+}
+
+static void loadMainConfig(const std::string& configdir)
 {
   ::arg().set("config-dir","Location of configuration directory (pdns.conf)")=configdir;
   ::arg().set("default-ttl","Seconds a result is valid if not set otherwise")="3600";
@@ -91,6 +102,7 @@ void loadMainConfig(const std::string& configdir)
   ::arg().set("max-signature-cache-entries", "Maximum number of signatures cache entries")="";
   ::arg().set("rng", "Specify random number generator to use. Valid values are auto,sodium,openssl,getrandom,arc4random,urandom.")="auto";
   ::arg().set("max-generate-steps", "Maximum number of $GENERATE steps when loading a zone from a file")="0";
+  ::arg().setSwitch("upgrade-unknown-types","Transparently upgrade known TYPExxx records. Recommended to keep off, except for PowerDNS upgrades until data sources are cleaned up")="no";
   ::arg().laxFile(configname.c_str());
 
   if(!::arg()["load-modules"].empty()) {
@@ -115,15 +127,11 @@ void loadMainConfig(const std::string& configdir)
   ::arg().set("cache-ttl","Seconds to store packets in the PacketCache")="20";
   ::arg().set("negquery-cache-ttl","Seconds to store negative query results in the QueryCache")="60";
   ::arg().set("query-cache-ttl","Seconds to store query results in the QueryCache")="20";
-  ::arg().set("default-soa-name","name to insert in the SOA record if none set in the backend")="a.misconfigured.powerdns.server";
-  ::arg().set("default-soa-mail","mail address to insert in the SOA record if none set in the backend")="";
-  ::arg().set("soa-refresh-default","Default SOA refresh")="10800";
-  ::arg().set("soa-retry-default","Default SOA retry")="3600";
-  ::arg().set("soa-expire-default","Default SOA expire")="604800";
-  ::arg().set("soa-minimum-ttl","Default SOA minimum ttl")="3600";
+  ::arg().set("default-soa-content","Default SOA content")="a.misconfigured.dns.server.invalid hostmaster.@ 0 10800 3600 604800 3600";
   ::arg().set("chroot","Switch to this chroot jail")="";
   ::arg().set("dnssec-key-cache-ttl","Seconds to cache DNSSEC keys from the database")="30";
   ::arg().set("domain-metadata-cache-ttl","Seconds to cache domain metadata from the database")="60";
+  ::arg().set("consistent-backends", "Assume individual domains are not divided over backends. Send only ANY lookup operations to the backend to reduce the number of lookups")="yes";
 
   // Keep this line below all ::arg().set() statements
   if (! ::arg().laxFile(configname.c_str()))
@@ -149,7 +157,7 @@ void loadMainConfig(const std::string& configdir)
   UeberBackend::go();
 }
 
-bool rectifyZone(DNSSECKeeper& dk, const DNSName& zone, bool quiet = false, bool rectifyTransaction = true)
+static bool rectifyZone(DNSSECKeeper& dk, const DNSName& zone, bool quiet = false, bool rectifyTransaction = true)
 {
   string output;
   string error;
@@ -166,7 +174,7 @@ bool rectifyZone(DNSSECKeeper& dk, const DNSName& zone, bool quiet = false, bool
   return ret;
 }
 
-void dbBench(const std::string& fname)
+static void dbBench(const std::string& fname)
 {
   ::arg().set("query-cache-ttl")="0";
   ::arg().set("negquery-cache-ttl")="0";
@@ -180,7 +188,7 @@ void dbBench(const std::string& fname)
     }
     string line;
     while(getline(ifs,line)) {
-      trim(line);
+      boost::trim(line);
       domains.push_back(line);
     }
   }
@@ -209,7 +217,7 @@ void dbBench(const std::string& fname)
   cout<<"Packet cache reports: "<<S.read("query-cache-hit")<<" hits (should be 0) and "<<S.read("query-cache-miss") <<" misses"<<endl;
 }
 
-bool rectifyAllZones(DNSSECKeeper &dk, bool quiet = false)
+static bool rectifyAllZones(DNSSECKeeper &dk, bool quiet = false)
 {
   UeberBackend B("default");
   vector<DomainInfo> domainInfo;
@@ -230,7 +238,7 @@ bool rectifyAllZones(DNSSECKeeper &dk, bool quiet = false)
   return result;
 }
 
-int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vector<DNSResourceRecord>* suppliedrecords=0)
+static int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vector<DNSResourceRecord>* suppliedrecords=0)
 {
   uint64_t numerrors=0, numwarnings=0;
 
@@ -313,10 +321,11 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
 
 
   bool hasNsAtApex = false;
-  set<DNSName> tlsas, cnames, noncnames, glue, checkglue;
+  set<DNSName> tlsas, cnames, noncnames, glue, checkglue, addresses, svcbAliases, httpsAliases, svcbRecords, httpsRecords;
   set<pair<DNSName, QType> > checkOcclusion;
   set<string> recordcontents;
   map<string, unsigned int> ttl;
+  set<std::tuple<DNSName, uint16_t, DNSName> > svcbTargets, httpsTargets;
 
   ostringstream content;
   pair<map<string, unsigned int>::iterator,bool> ret;
@@ -335,6 +344,9 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
   for(auto &rr : records) { // we modify this
     if(rr.qtype.getCode() == QType::TLSA)
       tlsas.insert(rr.qname);
+    if(rr.qtype.getCode() == QType::A || rr.qtype.getCode() == QType::AAAA) {
+      addresses.insert(rr.qname);
+    }
     if(rr.qtype.getCode() == QType::SOA) {
       vector<string>parts;
       stringtok(parts, rr.content);
@@ -355,7 +367,7 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
       rr.content = "\""+rr.content+"\"";
 
     try {
-      shared_ptr<DNSRecordContent> drc(DNSRecordContent::mastermake(rr.qtype.getCode(), 1, rr.content));
+      shared_ptr<DNSRecordContent> drc(DNSRecordContent::mastermake(rr.qtype.getCode(), QClass::IN, rr.content));
       string tmp=drc->serialize(rr.qname);
       tmp = drc->getZoneRepresentation(true);
       if (rr.qtype.getCode() != QType::AAAA) {
@@ -388,6 +400,39 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
       cout<<"[Error] Record '"<<rr.qname<<" IN "<<rr.qtype.getName()<<" "<<rr.content<<"' in zone '"<<zone<<"' is out-of-zone."<<endl;
       numerrors++;
       continue;
+    }
+
+    if (rr.qtype.getCode() == QType::SVCB || rr.qtype.getCode() == QType::HTTPS) {
+      vector<string> parts;
+      stringtok(parts, rr.content);
+      if (std::atoi(parts.at(0).c_str()) == 0 && parts.size() > 2) {
+        cout<<"[Warning] Aliasform "<<rr.qtype.getName()<<" record "<<rr.qname<<" has service parameters."<<endl;
+        numwarnings++;
+      }
+      switch (rr.qtype.getCode()) {
+      case QType::SVCB:
+        if (std::atoi(parts.at(0).c_str()) == 0) {
+          if (svcbAliases.find(rr.qname) != svcbAliases.end()) {
+            cout << "[Warning] More than one Alias form SVCB record for " << rr.qname << " exists." << endl;
+            numwarnings++;
+          }
+          svcbAliases.insert(rr.qname);
+        }
+        svcbTargets.emplace(std::make_tuple(rr.qname, std::atoi(parts.at(0).c_str()), DNSName(parts.at(1))));
+        svcbRecords.insert(rr.qname);
+        break;
+      case QType::HTTPS:
+        if (std::atoi(parts.at(0).c_str()) == 0) {
+          if (httpsAliases.find(rr.qname) != httpsAliases.end()) {
+            cout << "[Warning] More than one Alias form HTTPS record for " << rr.qname << " exists." << endl;
+            numwarnings++;
+          }
+          httpsAliases.insert(rr.qname);
+        }
+        httpsTargets.emplace(std::make_tuple(rr.qname, std::atoi(parts.at(0).c_str()), DNSName(parts.at(1))));
+        httpsRecords.insert(rr.qname);
+        break;
+      }
     }
 
     content.str("");
@@ -423,6 +468,7 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
     }
 
     if(rr.qname==zone) {
+      // apex checks
       if (rr.qtype.getCode() == QType::NS) {
         hasNsAtApex=true;
       } else if (rr.qtype.getCode() == QType::DS) {
@@ -430,6 +476,7 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
         numwarnings++;
       }
     } else {
+      // non-apex checks
       if (rr.qtype.getCode() == QType::SOA) {
         cout<<"[Error] SOA record not at apex '"<<rr.qname<<" IN "<<rr.qtype.getName()<<" "<<rr.content<<"' in zone '"<<zone<<"'"<<endl;
         numerrors++;
@@ -444,10 +491,14 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
         checkOcclusion.insert({rr.qname, rr.qtype});
       } else if (rr.qtype.getCode() == QType::A || rr.qtype.getCode() == QType::AAAA) {
         glue.insert(rr.qname);
-      } else if (rr.qtype == QType::DNAME) {
-        checkOcclusion.insert({rr.qname, rr.qtype});
       }
     }
+
+    // DNAMEs can occur both at the apex and below it
+    if (rr.qtype == QType::DNAME) {
+      checkOcclusion.insert({rr.qname, rr.qtype});
+    }
+
     if((rr.qtype.getCode() == QType::A || rr.qtype.getCode() == QType::AAAA) && !rr.qname.isWildcard() && !rr.qname.isHostname())
       cout<<"[Info] "<<rr.qname.toString()<<" record for '"<<rr.qtype.getName()<<"' is not a valid hostname."<<endl;
 
@@ -530,6 +581,54 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
     }
   }
 
+  for (const auto &svcb : svcbTargets) {
+    auto name = std::get<0>(svcb);
+    auto target = std::get<2>(svcb);
+    auto prio = std::get<1>(svcb);
+
+    if (name == target) {
+      cout<<"[Error] SVCB record "<<name<<" has itself as target."<<endl;
+      numerrors++;
+    }
+
+    if (prio == 0) {
+      if (target.isPartOf(zone)) {
+        if (svcbAliases.find(target) != svcbAliases.end()) {
+          cout << "[Warning] SVCB record for " << name << " has an aliasform target (" << target << ") that is in aliasform itself." << endl;
+          numwarnings++;
+        }
+        if (addresses.find(target) == addresses.end() && svcbRecords.find(target) == svcbRecords.end()) {
+          cout<<"[Error] SVCB record "<<name<<" has a target "<<target<<" that has neither address nor SVCB records."<<endl;
+          numerrors++;
+        }
+      }
+    }
+  }
+
+  for (const auto &httpsRecord : httpsTargets) {
+    auto name = std::get<0>(httpsRecord);
+    auto target = std::get<2>(httpsRecord);
+    auto prio = std::get<1>(httpsRecord);
+
+    if (name == target) {
+      cout<<"[Error] HTTPS record "<<name<<" has itself as target."<<endl;
+      numerrors++;
+    }
+
+    if (prio == 0) {
+      if (target.isPartOf(zone)) {
+        if (httpsAliases.find(target) != httpsAliases.end()) {
+          cout << "[Warning] HTTPS record for " << name << " has an aliasform target (" << target << ") that is in aliasform itself." << endl;
+          numwarnings++;
+        }
+        if (addresses.find(target) == addresses.end() && httpsRecords.find(target) == httpsRecords.end()) {
+          cout<<"[Error] HTTPS record "<<name<<" has a target "<<target<<" that has neither address nor HTTPS records."<<endl;
+          numerrors++;
+        }
+      }
+    }
+  }
+
   if(!hasNsAtApex) {
     cout<<"[Error] No NS record at zone apex in zone '"<<zone<<"'"<<endl;
     numerrors++;
@@ -544,10 +643,24 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
 
   for( const auto &qname : checkOcclusion ) {
     for( const auto &rr : records ) {
+      // a name does not occlude itself in the following situations:
+      // NS does not occlude DS+NS
+      // a DNAME does not occlude itself
       if( qname.first == rr.qname && ((( rr.qtype == QType::NS || rr.qtype == QType::DS ) && qname.second == QType::NS ) || ( rr.qtype == QType::DNAME && qname.second == QType::DNAME ) ) ) {
         continue;
       }
+
+      // for most types, X occludes X and (type-dependent) almost everything under X
       if( rr.qname.isPartOf( qname.first ) ) {
+
+        // but a DNAME does not occlude anything at its name, only the things under it
+        if( qname.second == QType::DNAME && rr.qname == qname.first ) {
+          continue;
+        }
+
+        // the record under inspection is:
+        // occluded by a DNAME, or
+        // occluded by a delegation, and is not glue or ENTs leading towards that glue
         if( qname.second == QType::DNAME || ( rr.qtype != QType::ENT && rr.qtype.getCode() != QType::A && rr.qtype.getCode() != QType::AAAA ) ) {
           cout << "[Warning] '" << rr.qname << "|" << rr.qtype.getName() << "' in zone '" << zone << "' is occluded by a ";
           if( qname.second == QType::NS ) {
@@ -604,7 +717,7 @@ int checkZone(DNSSECKeeper &dk, UeberBackend &B, const DNSName& zone, const vect
   return EXIT_FAILURE;
 }
 
-int checkAllZones(DNSSECKeeper &dk, bool exitOnError)
+static int checkAllZones(DNSSECKeeper &dk, bool exitOnError)
 {
   UeberBackend B("default");
   vector<DomainInfo> domainInfo;
@@ -648,7 +761,7 @@ int checkAllZones(DNSSECKeeper &dk, bool exitOnError)
   return EXIT_FAILURE;
 }
 
-int increaseSerial(const DNSName& zone, DNSSECKeeper &dk)
+static int increaseSerial(const DNSName& zone, DNSSECKeeper &dk)
 {
   UeberBackend B("default");
   SOAData sd;
@@ -698,7 +811,7 @@ int increaseSerial(const DNSName& zone, DNSSECKeeper &dk)
   return 0;
 }
 
-int deleteZone(const DNSName &zone) {
+static int deleteZone(const DNSName &zone) {
   UeberBackend B;
   DomainInfo di;
   if (! B.getDomainInfo(zone, di)) {
@@ -713,10 +826,10 @@ int deleteZone(const DNSName &zone) {
   return EXIT_FAILURE;
 }
 
-void listKey(DomainInfo const &di, DNSSECKeeper& dk, bool printHeader = true) {
+static void listKey(DomainInfo const &di, DNSSECKeeper& dk, bool printHeader = true) {
   if (printHeader) {
-    cout<<"Zone                          Type    Size    Algorithm    ID   Location    Keytag"<<endl;
-    cout<<"----------------------------------------------------------------------------------"<<endl;
+    cout<<"Zone                          Type Act Pub Size    Algorithm       ID   Location    Keytag"<<endl;
+    cout<<"------------------------------------------------------------------------------------------"<<endl;
   }
   unsigned int spacelen = 0;
   for (auto const &key : dk.getKeys(di.zone)) {
@@ -726,7 +839,19 @@ void listKey(DomainInfo const &di, DNSSECKeeper& dk, bool printHeader = true) {
     else
       cout<<string(30 - di.zone.toStringNoDot().length(), ' ');
 
-    cout<<DNSSECKeeper::keyTypeToString(key.second.keyType)<<"     ";
+    cout<<DNSSECKeeper::keyTypeToString(key.second.keyType)<<"  ";
+
+    if (key.second.active) {
+      cout << "Act ";
+    } else {
+      cout << "    ";
+    }
+
+    if (key.second.published) {
+      cout << "Pub ";
+    } else {
+      cout << "    ";
+    }
 
     spacelen = (std::to_string(key.first.getKey()->getBits()).length() >= 8) ? 1 : 8 - std::to_string(key.first.getKey()->getBits()).length();
     if (key.first.getKey()->getBits() < 1) {
@@ -737,7 +862,7 @@ void listKey(DomainInfo const &di, DNSSECKeeper& dk, bool printHeader = true) {
     }
 
     string algname = DNSSECKeeper::algorithm2name(key.first.d_algorithm);
-    spacelen = (algname.length() >= 13) ? 1 : 13 - algname.length();
+    spacelen = (algname.length() >= 16) ? 1 : 16 - algname.length();
     cout<<algname<<string(spacelen, ' ');
 
     spacelen = (std::to_string(key.second.id).length() > 5) ? 1 : 5 - std::to_string(key.second.id).length();
@@ -768,7 +893,7 @@ void listKey(DomainInfo const &di, DNSSECKeeper& dk, bool printHeader = true) {
   }
 }
 
-int listKeys(const string &zname, DNSSECKeeper& dk){
+static int listKeys(const string &zname, DNSSECKeeper& dk){
   UeberBackend B("default");
 
   if (zname != "all") {
@@ -782,7 +907,7 @@ int listKeys(const string &zname, DNSSECKeeper& dk){
     vector<DomainInfo> domainInfo;
     B.getAllDomains(&domainInfo);
     bool printHeader = true;
-    for (auto const di : domainInfo) {
+    for (const auto& di : domainInfo) {
       listKey(di, dk, printHeader);
       printHeader = false;
     }
@@ -790,7 +915,7 @@ int listKeys(const string &zname, DNSSECKeeper& dk){
   return EXIT_SUCCESS;
 }
 
-int listZone(const DNSName &zone) {
+static int listZone(const DNSName &zone) {
   UeberBackend B;
   DomainInfo di;
 
@@ -816,7 +941,7 @@ int listZone(const DNSName &zone) {
 }
 
 // lovingly copied from http://stackoverflow.com/questions/1798511/how-to-avoid-press-enter-with-any-getchar
-int read1char(){
+static int read1char(){
     int c;
     static struct termios oldt, newt;
 
@@ -843,7 +968,7 @@ int read1char(){
     return c;
 }
 
-int clearZone(DNSSECKeeper& dk, const DNSName &zone) {
+static int clearZone(DNSSECKeeper& dk, const DNSName &zone) {
   UeberBackend B;
   DomainInfo di;
 
@@ -859,7 +984,7 @@ int clearZone(DNSSECKeeper& dk, const DNSName &zone) {
   return EXIT_SUCCESS;
 }
 
-int editZone(const DNSName &zone) {
+static int editZone(const DNSName &zone) {
   UeberBackend B;
   DomainInfo di;
   DNSSECKeeper dk(&B);
@@ -1076,7 +1201,7 @@ static int xcryptIP(const std::string& cmd, const std::string& ip, const std::st
 }
 
 
-int loadZone(DNSName zone, const string& fname) {
+static int loadZone(DNSName zone, const string& fname) {
   UeberBackend B;
   DomainInfo di;
 
@@ -1085,7 +1210,7 @@ int loadZone(DNSName zone, const string& fname) {
   }
   else {
     cerr<<"Creating '"<<zone<<"'"<<endl;
-    B.createDomain(zone);
+    B.createDomain(zone, DomainInfo::Native, vector<ComboAddress>(), "");
 
     if(!B.getDomainInfo(zone, di)) {
       cerr<<"Domain '"<<zone<<"' was not created - perhaps backend ("<<::arg()["launch"]<<") does not support storing new zones."<<endl;
@@ -1120,7 +1245,7 @@ int loadZone(DNSName zone, const string& fname) {
   return EXIT_SUCCESS;
 }
 
-int createZone(const DNSName &zone, const DNSName& nsname) {
+static int createZone(const DNSName &zone, const DNSName& nsname) {
   UeberBackend B;
   DomainInfo di;
   if (B.getDomainInfo(zone, di)) {
@@ -1128,7 +1253,7 @@ int createZone(const DNSName &zone, const DNSName& nsname) {
     return EXIT_FAILURE;
   }
   cerr<<"Creating empty zone '"<<zone<<"'"<<endl;
-  B.createDomain(zone);
+  B.createDomain(zone, DomainInfo::Native, vector<ComboAddress>(), "");
   if(!B.getDomainInfo(zone, di)) {
     cerr<<"Domain '"<<zone<<"' was not created!"<<endl;
     return EXIT_FAILURE;
@@ -1140,12 +1265,10 @@ int createZone(const DNSName &zone, const DNSName& nsname) {
   rr.ttl = ::arg().asNum("default-ttl");
   rr.qtype = "SOA";
 
-  string soa = (boost::format("%s %s 1")
-                % (nsname.empty() ? ::arg()["default-soa-name"] : nsname.toString())
-                % (::arg().isEmpty("default-soa-mail") ? (DNSName("hostmaster.") + zone).toString() : ::arg()["default-soa-mail"])
-  ).str();
+  string soa = ::arg()["default-soa-content"];
+  boost::replace_all(soa, "@", zone.toStringNoDot());
   SOAData sd;
-  fillSOAData(soa, sd);  // fills out default values for us
+  fillSOAData(soa, sd);
   rr.content = makeSOAContent(sd)->getZoneRepresentation(true);
   rr.domain_id = di.id;
   di.backend->startTransaction(zone, di.id);
@@ -1162,7 +1285,7 @@ int createZone(const DNSName &zone, const DNSName& nsname) {
   return EXIT_SUCCESS;
 }
 
-int createSlaveZone(const vector<string>& cmds) {
+static int createSlaveZone(const vector<string>& cmds) {
   UeberBackend B;
   DomainInfo di;
   DNSName zone(cmds[1]);
@@ -1170,23 +1293,20 @@ int createSlaveZone(const vector<string>& cmds) {
     cerr<<"Domain '"<<zone<<"' exists already"<<endl;
     return EXIT_FAILURE;
   }
-  vector<string> masters;
+  vector<ComboAddress> masters;
   for (unsigned i=2; i < cmds.size(); i++) {
-    ComboAddress master(cmds[i], 53);
-    masters.push_back(master.toStringWithPort());
+    masters.emplace_back(cmds[i], 53);
   }
-  cerr<<"Creating slave zone '"<<zone<<"', with master(s) '"<<boost::join(masters, ",")<<"'"<<endl;
-  B.createDomain(zone);
+  cerr<<"Creating slave zone '"<<zone<<"', with master(s) '"<<comboAddressVecToString(masters)<<"'"<<endl;
+  B.createDomain(zone, DomainInfo::Slave, masters, "");
   if(!B.getDomainInfo(zone, di)) {
     cerr<<"Domain '"<<zone<<"' was not created!"<<endl;
     return EXIT_FAILURE;
   }
-  di.backend->setKind(zone, DomainInfo::Slave);
-  di.backend->setMaster(zone, boost::join(masters, ","));
   return EXIT_SUCCESS;
 }
 
-int changeSlaveZoneMaster(const vector<string>& cmds) {
+static int changeSlaveZoneMaster(const vector<string>& cmds) {
   UeberBackend B;
   DomainInfo di;
   DNSName zone(cmds[1]);
@@ -1194,14 +1314,13 @@ int changeSlaveZoneMaster(const vector<string>& cmds) {
     cerr<<"Domain '"<<zone<<"' doesn't exist"<<endl;
     return EXIT_FAILURE;
   }
-  vector<string> masters;
+  vector<ComboAddress> masters;
   for (unsigned i=2; i < cmds.size(); i++) {
-    ComboAddress master(cmds[i], 53);
-    masters.push_back(master.toStringWithPort());
+    masters.emplace_back(cmds[i], 53);
   }
-  cerr<<"Updating slave zone '"<<zone<<"', master(s) to '"<<boost::join(masters, ",")<<"'"<<endl;
+  cerr<<"Updating slave zone '"<<zone<<"', master(s) to '"<<comboAddressVecToString(masters)<<"'"<<endl;
   try {
-    di.backend->setMaster(zone, boost::join(masters, ","));
+    di.backend->setMasters(zone, masters);
     return EXIT_SUCCESS;
   }
   catch (PDNSException& e) {
@@ -1211,7 +1330,7 @@ int changeSlaveZoneMaster(const vector<string>& cmds) {
 }
 
 // add-record ZONE name type [ttl] "content" ["content"]
-int addOrReplaceRecord(bool addOrReplace, const vector<string>& cmds) {
+static int addOrReplaceRecord(bool addOrReplace, const vector<string>& cmds) {
   DNSResourceRecord rr;
   vector<DNSResourceRecord> newrrs;
   DNSName zone(cmds[1]);
@@ -1226,7 +1345,6 @@ int addOrReplaceRecord(bool addOrReplace, const vector<string>& cmds) {
 
   UeberBackend B;
   DomainInfo di;
-
   if(!B.getDomainInfo(zone, di)) {
     cerr<<"Domain '"<<zone<<"' does not exist"<<endl;
     return EXIT_FAILURE;
@@ -1290,7 +1408,10 @@ int addOrReplaceRecord(bool addOrReplace, const vector<string>& cmds) {
   }
 
 
-  di.backend->replaceRRSet(di.id, name, rr.qtype, newrrs);
+  if(!di.backend->replaceRRSet(di.id, name, rr.qtype, newrrs)) {
+    cerr<<"backend did not accept the new RRset, aborting"<<endl;
+    return EXIT_FAILURE;
+  }
   // need to be explicit to bypass the ueberbackend cache!
   di.backend->lookup(rr.qtype, name, di.id);
   cout<<"New rrset:"<<endl;
@@ -1301,8 +1422,19 @@ int addOrReplaceRecord(bool addOrReplace, const vector<string>& cmds) {
   return EXIT_SUCCESS;
 }
 
+// addSuperMaster add anew super master
+static int addSuperMaster(const std::string &IP, const std::string &nameserver, const std::string &account)
+{
+  UeberBackend B("default");
+
+  if ( B.superMasterAdd(IP, nameserver, account) ){ 
+    return EXIT_SUCCESS; 
+  }
+  return EXIT_FAILURE;
+}
+
 // delete-rrset zone name type
-int deleteRRSet(const std::string& zone_, const std::string& name_, const std::string& type_)
+static int deleteRRSet(const std::string& zone_, const std::string& name_, const std::string& type_)
 {
   UeberBackend B;
   DomainInfo di;
@@ -1325,7 +1457,7 @@ int deleteRRSet(const std::string& zone_, const std::string& name_, const std::s
   return EXIT_SUCCESS;
 }
 
-int listAllZones(const string &type="") {
+static int listAllZones(const string &type="") {
 
   int kindFilter = -1;
   if (type.size()) {
@@ -1364,17 +1496,17 @@ int listAllZones(const string &type="") {
   return 0;
 }
 
-bool testAlgorithm(int algo)
+static bool testAlgorithm(int algo)
 {
   return DNSCryptoKeyEngine::testOne(algo);
 }
 
-bool testAlgorithms()
+static bool testAlgorithms()
 {
   return DNSCryptoKeyEngine::testAll();
 }
 
-void testSpeed(DNSSECKeeper& dk, const DNSName& zone, const string& remote, int cores)
+static void testSpeed(DNSSECKeeper& dk, const DNSName& zone, const string& remote, int cores)
 {
   DNSResourceRecord rr;
   rr.qname=DNSName("blah")+zone;
@@ -1420,7 +1552,7 @@ void testSpeed(DNSSECKeeper& dk, const DNSName& zone, const string& remote, int 
   cerr<<"Net speed: "<<csp.d_signed/ (dt.udiff()/1000000.0) << " sigs/s"<<endl;
 }
 
-void verifyCrypto(const string& zone)
+static void verifyCrypto(const string& zone)
 {
   ZoneParserTNG zpt(zone);
   zpt.setMaxGenerateSteps(::arg().asNum("max-generate-steps"));
@@ -1458,7 +1590,8 @@ void verifyCrypto(const string& zone)
     cerr<<"Original DS:   "<<apex.toString()<<" IN DS "<<dsrc.getZoneRepresentation()<<endl;
   }
 }
-bool disableDNSSECOnZone(DNSSECKeeper& dk, const DNSName& zone)
+
+static bool disableDNSSECOnZone(DNSSECKeeper& dk, const DNSName& zone)
 {
   UeberBackend B("default");
   DomainInfo di;
@@ -1476,7 +1609,7 @@ bool disableDNSSECOnZone(DNSSECKeeper& dk, const DNSName& zone)
   return ret;
 }
 
-int setZoneAccount(const DNSName& zone, const string &account)
+static int setZoneAccount(const DNSName& zone, const string &account)
 {
   UeberBackend B("default");
   DomainInfo di;
@@ -1492,7 +1625,7 @@ int setZoneAccount(const DNSName& zone, const string &account)
   return EXIT_SUCCESS;
 }
 
-int setZoneKind(const DNSName& zone, const DomainInfo::DomainKind kind)
+static int setZoneKind(const DNSName& zone, const DomainInfo::DomainKind kind)
 {
   UeberBackend B("default");
   DomainInfo di;
@@ -1508,7 +1641,7 @@ int setZoneKind(const DNSName& zone, const DomainInfo::DomainKind kind)
   return EXIT_SUCCESS;
 }
 
-bool showZone(DNSSECKeeper& dk, const DNSName& zone, bool exportDS = false)
+static bool showZone(DNSSECKeeper& dk, const DNSName& zone, bool exportDS = false)
 {
   UeberBackend B("default");
   DomainInfo di;
@@ -1594,7 +1727,7 @@ bool showZone(DNSSECKeeper& dk, const DNSName& zone, bool exportDS = false)
       cout<<endl;
 
       for(const auto& m : metamap) {
-        for(const auto i : m.second)
+        for(const auto& i : m.second)
           cout << '\t' << m.first<<'\t' << i <<endl;
       }
     }
@@ -1681,7 +1814,7 @@ bool showZone(DNSSECKeeper& dk, const DNSName& zone, bool exportDS = false)
         cout<<"ID = "<<value.second.id<<" ("<<DNSSECKeeper::keyTypeToString(value.second.keyType)<<")";
       }
       if (value.first.getKey()->getBits() < 1) {
-        cerr<<" <key missing or defunct>" <<endl;
+        cout<<" <key missing or defunct, perhaps you should run pdnsutil hsm create-key>" <<endl;
         continue;
       }
       if (!exportDS) {
@@ -1718,7 +1851,7 @@ bool showZone(DNSSECKeeper& dk, const DNSName& zone, bool exportDS = false)
   return true;
 }
 
-bool secureZone(DNSSECKeeper& dk, const DNSName& zone)
+static bool secureZone(DNSSECKeeper& dk, const DNSName& zone)
 {
   // parse attribute
   int k_size;
@@ -1750,7 +1883,7 @@ bool secureZone(DNSSECKeeper& dk, const DNSName& zone)
 
   DomainInfo di;
   UeberBackend B("default");
-  if(!B.getDomainInfo(zone, di) || !di.backend) { // di.backend and B are mostly identical
+  if(!B.getDomainInfo(zone, di, false) || !di.backend) { // di.backend and B are mostly identical
     cerr<<"Can't find a zone called '"<<zone<<"'"<<endl;
     return false;
   }
@@ -1809,7 +1942,7 @@ bool secureZone(DNSSECKeeper& dk, const DNSName& zone)
   return true;
 }
 
-void testSchema(DNSSECKeeper& dk, const DNSName& zone)
+static int testSchema(DNSSECKeeper& dk, const DNSName& zone)
 {
   cout<<"Note: test-schema will try to create the zone, but it will not remove it."<<endl;
   cout<<"Please clean up after this."<<endl;
@@ -1826,7 +1959,7 @@ void testSchema(DNSSECKeeper& dk, const DNSName& zone)
   DomainInfo di;
   if(!B.getDomainInfo(zone, di) || !di.backend) { // di.backend and B are mostly identical
     cout<<"Can't find domain we just created, aborting"<<endl;
-    return;
+    return EXIT_FAILURE;
   }
   db=di.backend;
   DNSResourceRecord rr, rrget;
@@ -1856,13 +1989,13 @@ void testSchema(DNSSECKeeper& dk, const DNSName& zone)
     if(db->get(rrthrowaway)) // should not touch rr but don't assume anything
     {
       cout<<"Expected one record, got multiple, aborting"<<endl;
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
     int size=rrget.content.size();
     if(size != 302)
     {
       cout<<"Expected 302 bytes, got "<<size<<", aborting"<<endl;
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
     }
   }
   cout<<"[+] content field is over 255 bytes"<<endl;
@@ -1899,12 +2032,12 @@ void testSchema(DNSSECKeeper& dk, const DNSName& zone)
   if(before != DNSName("_underscore")+zone)
   {
     cout<<"before is wrong, got '"<<before.toString()<<"', expected '_underscore."<<zone.toString()<<"', aborting"<<endl;
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
   if(after != zone)
   {
     cout<<"after is wrong, got '"<<after.toString()<<"', expected '"<<zone.toString()<<"', aborting"<<endl;
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
   cout<<"[+] ordername sorting is correct for names starting with _"<<endl;
   cout<<"Setting low notified serial"<<endl;
@@ -1912,7 +2045,7 @@ void testSchema(DNSSECKeeper& dk, const DNSName& zone)
   db->getDomainInfo(zone, di);
   if(di.notified_serial != 500) {
     cout<<"[-] Set serial 500, got back "<<di.notified_serial<<", aborting"<<endl;
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
   cout<<"Setting serial that needs 32 bits"<<endl;
   try {
@@ -1920,20 +2053,22 @@ void testSchema(DNSSECKeeper& dk, const DNSName& zone)
   } catch(const PDNSException &pe) {
     cout<<"While setting serial, got error: "<<pe.reason<<endl;
     cout<<"aborting"<<endl;
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
   db->getDomainInfo(zone, di);
   if(di.notified_serial != 2147484148) {
     cout<<"[-] Set serial 2147484148, got back "<<di.notified_serial<<", aborting"<<endl;
-    exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   } else {
     cout<<"[+] Big serials work correctly"<<endl;
   }
   cout<<endl;
   cout<<"End of tests, please remove "<<zone<<" from domains+records"<<endl;
+
+  return EXIT_SUCCESS;
 }
 
-int addOrSetMeta(const DNSName& zone, const string& kind, const vector<string>& values, bool clobber) {
+static int addOrSetMeta(const DNSName& zone, const string& kind, const vector<string>& values, bool clobber) {
   UeberBackend B("default");
   DomainInfo di;
 
@@ -1997,6 +2132,8 @@ try
     cout<<"activate-zone-key ZONE KEY-ID      Activate the key with key id KEY-ID in ZONE"<<endl;
     cout<<"add-record ZONE NAME TYPE [ttl] content"<<endl;
     cout<<"             [content..]           Add one or more records to ZONE"<<endl;
+    cout<<"add-supermaster IP NAMESERVER [account]"<<endl;
+    cout<<"                                   Add a new super-master "<<endl;
     cout<<"add-zone-key ZONE {zsk|ksk} [BITS] [active|inactive] [published|unpublished]"<<endl;
     cout<<"             [rsasha1|rsasha1-nsec3-sha1|rsasha256|rsasha512|ecdsa256|ecdsa384";
 #if defined(HAVE_LIBSODIUM) || defined(HAVE_LIBDECAF) || defined(HAVE_LIBCRYPTO_ED25519)
@@ -2046,7 +2183,7 @@ try
     cout<<"import-tsig-key NAME ALGORITHM KEY Import TSIG key"<<endl;
     cout<<"import-zone-key ZONE FILE          Import from a file a private key, ZSK or KSK"<<endl;
     cout<<"       [active|inactive] [ksk|zsk] [published|unpublished] Defaults to KSK, active and published"<<endl;
-    cout<<"ipdecrypt IP passphrase/key [key]  Encrypt IP address using passphrase or base64 key"<<endl;
+    cout<<"ipdecrypt IP passphrase/key [key]  Decrypt IP address using passphrase or base64 key"<<endl;
     cout<<"ipencrypt IP passphrase/key [key]  Encrypt IP address using passphrase or base64 key"<<endl;
     cout<<"load-zone ZONE FILE                Load ZONE from FILE, possibly creating zone or atomically"<<endl;
     cout<<"                                   replacing contents"<<endl;
@@ -2068,7 +2205,8 @@ try
     cout<<"set-account ZONE ACCOUNT           Change the account (owner) of ZONE to ACCOUNT"<<endl;
     cout<<"set-nsec3 ZONE ['PARAMS' [narrow]] Enable NSEC3 with PARAMS. Optionally narrow"<<endl;
     cout<<"set-presigned ZONE                 Use presigned RRSIGs from storage"<<endl;
-    cout<<"set-publish-cdnskey ZONE           Enable sending CDNSKEY responses for ZONE"<<endl;
+    cout<<"set-publish-cdnskey ZONE [delete]  Enable sending CDNSKEY responses for ZONE. Add 'delete' to publish a CDNSKEY with a"<<endl;
+    cout<<"                                   DNSSEC delete algorithm"<<endl;
     cout<<"set-publish-cds ZONE [DIGESTALGOS] Enable sending CDS responses for ZONE, using DIGESTALGOS as signature algorithms"<<endl;
     cout<<"                                   DIGESTALGOS should be a comma separated list of numbers, it is '2' by default"<<endl;
     cout<<"add-meta ZONE KIND VALUE           Add zone metadata, this adds to the existing KIND"<<endl;
@@ -2132,7 +2270,7 @@ try
     cout<<"DNSKEY algorithms supported by this installation of PowerDNS:"<<endl;
 
     auto algosWithBackend = DNSCryptoKeyEngine::listAllAlgosWithBackend();
-    for (auto const algoWithBackend : algosWithBackend){
+    for (const auto& algoWithBackend : algosWithBackend){
       string algoName = DNSSECKeeper::algorithm2name(algoWithBackend.first);
       cout<<std::to_string(algoWithBackend.first)<<" - "<<algoName;
       if (cmds.size() == 2 && cmds[1] == "with-backend")
@@ -2175,8 +2313,7 @@ try
       cerr << "Syntax: pdnsutil test-schema ZONE"<<endl;
       return 0;
     }
-    testSchema(dk, DNSName(cmds[1]));
-    return 0;
+    return testSchema(dk, DNSName(cmds[1]));
   }
   if(cmds[0] == "rectify-zone") {
     if(cmds.size() < 2) {
@@ -2201,14 +2338,14 @@ try
       return 0;
     }
     UeberBackend B("default");
-    exit(checkZone(dk, B, DNSName(cmds[1])));
+    return checkZone(dk, B, DNSName(cmds[1]));
   }
   else if(cmds[0] == "bench-db") {
     dbBench(cmds.size() > 1 ? cmds[1] : "");
   }
   else if (cmds[0] == "check-all-zones") {
     bool exitOnError = ((cmds.size() >= 2 ? cmds[1] : "") == "exit-on-error");
-    exit(checkAllZones(dk, exitOnError));
+    return checkAllZones(dk, exitOnError);
   }
   else if (cmds[0] == "list-all-zones") {
     if (cmds.size() > 2) {
@@ -2288,6 +2425,12 @@ try
       cerr<<"Invalid KEY-ID '"<<cmds[2]<<"'"<<endl;
       return 1;
     }
+    try {
+      dk.getKeyById(zone, id);
+    } catch (std::exception& e) {
+      cerr<<e.what()<<endl;
+      return 1;
+    }
     if (!dk.activateKey(zone, id)) {
       cerr<<"Activation of key failed"<<endl;
       return 1;
@@ -2304,6 +2447,12 @@ try
     if(!id)
     {
       cerr<<"Invalid KEY-ID"<<endl;
+      return 1;
+    }
+    try {
+      dk.getKeyById(zone, id);
+    } catch (std::exception& e) {
+      cerr<<e.what()<<endl;
       return 1;
     }
     if (!dk.deactivateKey(zone, id)) {
@@ -2324,6 +2473,12 @@ try
       cerr<<"Invalid KEY-ID '"<<cmds[2]<<"'"<<endl;
       return 1;
     }
+    try {
+      dk.getKeyById(zone, id);
+    } catch (std::exception& e) {
+      cerr<<e.what()<<endl;
+      return 1;
+    }
     if (!dk.publishKey(zone, id)) {
       cerr<<"Publishing of key failed"<<endl;
       return 1;
@@ -2340,6 +2495,12 @@ try
     if(!id)
     {
       cerr<<"Invalid KEY-ID '"<<cmds[2]<<"'"<<endl;
+      return 1;
+    }
+    try {
+      dk.getKeyById(zone, id);
+    } catch (std::exception& e) {
+      cerr<<e.what()<<endl;
       return 1;
     }
     if (!dk.unpublishKey(zone, id)) {
@@ -2397,13 +2558,13 @@ try
         bits = pdns_stou(cmds[n]);
       } else {
         cerr<<"Unknown algorithm, key flag or size '"<<cmds[n]<<"'"<<endl;
-        exit(EXIT_FAILURE);;
+        return EXIT_FAILURE;
       }
     }
     int64_t id;
     if (!dk.addKey(zone, keyOrZone, algorithm, id, bits, active, published)) {
       cerr<<"Adding key failed, perhaps DNSSEC not enabled in configuration?"<<endl;
-      exit(1);
+      return 1;
     } else {
       cerr<<"Added a " << (keyOrZone ? "KSK" : "ZSK")<<" with algorithm = "<<algorithm<<", active="<<active<<endl;
       if (bits)
@@ -2435,49 +2596,56 @@ try
       cerr<<"Syntax: pdnsutil delete-zone ZONE"<<endl;
       return 0;
     }
-    exit(deleteZone(DNSName(cmds[1])));
+    return deleteZone(DNSName(cmds[1]));
   }
   else if(cmds[0] == "create-zone") {
     if(cmds.size() != 2 && cmds.size()!=3 ) {
       cerr<<"Syntax: pdnsutil create-zone ZONE [nsname]"<<endl;
       return 0;
     }
-    exit(createZone(DNSName(cmds[1]), cmds.size() > 2 ? DNSName(cmds[2]): DNSName()));
+    return createZone(DNSName(cmds[1]), cmds.size() > 2 ? DNSName(cmds[2]): DNSName());
   }
   else if(cmds[0] == "create-slave-zone") {
     if(cmds.size() < 3 ) {
       cerr<<"Syntax: pdnsutil create-slave-zone ZONE master-ip [master-ip..]"<<endl;
       return 0;
     }
-    exit(createSlaveZone(cmds));
+    return createSlaveZone(cmds);
   }
   else if(cmds[0] == "change-slave-zone-master") {
     if(cmds.size() < 3 ) {
       cerr<<"Syntax: pdnsutil change-slave-zone-master ZONE master-ip [master-ip..]"<<endl;
       return 0;
     }
-    exit(changeSlaveZoneMaster(cmds));
+    return changeSlaveZoneMaster(cmds);
   }
   else if(cmds[0] == "add-record") {
     if(cmds.size() < 5) {
       cerr<<"Syntax: pdnsutil add-record ZONE name type [ttl] \"content\" [\"content\"...]"<<endl;
       return 0;
     }
-    exit(addOrReplaceRecord(true, cmds));
+    return addOrReplaceRecord(true, cmds);
+  }
+  else if(cmds[0] == "add-supermaster") {
+    if(cmds.size() < 3) {
+      cerr<<"Syntax: pdnsutil add-supermaster IP NAMESERVER [account]"<<endl;
+      return 0;
+    }
+    exit(addSuperMaster(cmds[1], cmds[2], cmds.size() > 3 ? cmds[3] : "" ));
   }
   else if(cmds[0] == "replace-rrset") {
     if(cmds.size() < 5) {
       cerr<<"Syntax: pdnsutil replace-rrset ZONE name type [ttl] \"content\" [\"content\"...]"<<endl;
       return 0;
     }
-    exit(addOrReplaceRecord(false , cmds));
+    return addOrReplaceRecord(false , cmds);
   }
   else if(cmds[0] == "delete-rrset") {
     if(cmds.size() != 4) {
       cerr<<"Syntax: pdnsutil delete-rrset ZONE name type"<<endl;
       return 0;
     }
-    exit(deleteRRSet(cmds[1], cmds[2], cmds[3]));
+    return deleteRRSet(cmds[1], cmds[2], cmds[3]);
   }
   else if(cmds[0] == "list-zone") {
     if(cmds.size() != 2) {
@@ -2487,7 +2655,7 @@ try
     if(cmds[1]==".")
       cmds[1].clear();
 
-    exit(listZone(DNSName(cmds[1])));
+    return listZone(DNSName(cmds[1]));
   }
   else if(cmds[0] == "edit-zone") {
     if(cmds.size() != 2) {
@@ -2497,7 +2665,7 @@ try
     if(cmds[1]==".")
       cmds[1].clear();
 
-    exit(editZone(DNSName(cmds[1])));
+    return editZone(DNSName(cmds[1]));
   }
   else if(cmds[0] == "clear-zone") {
     if(cmds.size() != 2) {
@@ -2507,7 +2675,7 @@ try
     if(cmds[1]==".")
       cmds[1].clear();
 
-    exit(clearZone(dk, DNSName(cmds[1])));
+    return clearZone(dk, DNSName(cmds[1]));
   }
   else if(cmds[0] == "list-keys") {
     if(cmds.size() > 2) {
@@ -2515,7 +2683,7 @@ try
       return 0;
     }
     string zname = (cmds.size() == 2) ? cmds[1] : "all";
-    exit(listKeys(zname, dk));
+    return listKeys(zname, dk);
   }
   else if(cmds[0] == "load-zone") {
     if(cmds.size() < 3) {
@@ -2596,7 +2764,7 @@ try
     }
     DNSName zone(cmds[1]);
     auto kind=DomainInfo::stringToKind(cmds[2]);
-    exit(setZoneKind(zone, kind));
+    return setZoneKind(zone, kind);
   }
   else if(cmds[0]=="set-account") {
     if(cmds.size() != 3) {
@@ -2604,7 +2772,7 @@ try
       return 0;
     }
     DNSName zone(cmds[1]);
-    exit(setZoneAccount(zone, cmds[2]));
+    return setZoneAccount(zone, cmds[2]);
   }
   else if(cmds[0]=="set-nsec3") {
     if(cmds.size() < 2) {
@@ -2653,11 +2821,11 @@ try
     return 0;
   }
   else if(cmds[0]=="set-publish-cdnskey") {
-    if(cmds.size() < 2) {
-      cerr<<"Syntax: pdnsutil set-publish-cdnskey ZONE"<<endl;
+    if(cmds.size() < 2 || (cmds.size() == 3 && cmds[2] != "delete")) {
+      cerr<<"Syntax: pdnsutil set-publish-cdnskey ZONE [delete]"<<endl;
       return 0;
     }
-    if (! dk.setPublishCDNSKEY(DNSName(cmds[1]))) {
+    if (! dk.setPublishCDNSKEY(DNSName(cmds[1]), (cmds.size() == 3 && cmds[2] == "delete"))) {
       cerr << "Could not set publishing for CDNSKEY records for "<< cmds[1]<<endl;
       return 1;
     }
@@ -2745,7 +2913,7 @@ try
   else if(cmds[0]=="export-zone-key") {
     if(cmds.size() < 3) {
       cerr<<"Syntax: pdnsutil export-zone-key ZONE KEY-ID"<<endl;
-      return 0;
+      return 1;
     }
 
     string zone=cmds[1];
@@ -2756,14 +2924,14 @@ try
   else if(cmds[0]=="increase-serial") {
     if (cmds.size() < 2) {
       cerr<<"Syntax: pdnsutil increase-serial ZONE"<<endl;
-      return 0;
+      return 1;
     }
     return increaseSerial(DNSName(cmds[1]), dk);
   }
   else if(cmds[0]=="import-zone-key-pem") {
     if(cmds.size() < 4) {
       cerr<<"Syntax: pdnsutil import-zone-key-pem ZONE FILE ALGORITHM {ksk|zsk}"<<endl;
-      exit(1);
+      return 1;
     }
     string zone=cmds[1];
     string fname=cmds[2];
@@ -2773,7 +2941,7 @@ try
     while(getline(ifs, line)) {
       if(line[0]=='-')
         continue;
-      trim(line);
+      boost::trim(line);
       interim += line;
     }
     B64Decode(interim, raw);
@@ -2796,7 +2964,7 @@ try
         dpk.d_flags = 257;
       else {
         cerr<<"Unknown key flag '"<<cmds[4]<<"'"<<endl;
-        exit(1);
+        return 1;
       }
     }
     else
@@ -2805,7 +2973,7 @@ try
     int64_t id;
     if (!dk.addKey(DNSName(zone), dpk, id)) {
       cerr<<"Adding key failed, perhaps DNSSEC not enabled in configuration?"<<endl;
-      exit(1);
+      return 1;
     }
     if (id == -1) {
       cerr<<std::to_string(id)<<"Key was added, but backend does not support returning of key id"<<endl;
@@ -2819,7 +2987,7 @@ try
   else if(cmds[0]=="import-zone-key") {
     if(cmds.size() < 3) {
       cerr<<"Syntax: pdnsutil import-zone-key ZONE FILE [ksk|zsk] [active|inactive]"<<endl;
-      exit(1);
+      return 1;
     }
     string zone=cmds[1];
     string fname=cmds[2];
@@ -2851,13 +3019,13 @@ try
         published = 0;
       else {
         cerr<<"Unknown key flag '"<<cmds[n]<<"'"<<endl;
-        exit(1);
+        return 1;
       }
     }
     int64_t id;
     if (!dk.addKey(DNSName(zone), dpk, id, active, published)) {
       cerr<<"Adding key failed, perhaps DNSSEC not enabled in configuration?"<<endl;
-      exit(1);
+      return 1;
     }
     if (id == -1) {
       cerr<<std::to_string(id)<<"Key was added, but backend does not support returning of key id"<<endl;
@@ -2870,7 +3038,7 @@ try
   else if(cmds[0]=="export-zone-dnskey") {
     if(cmds.size() < 3) {
       cerr<<"Syntax: pdnsutil export-zone-dnskey ZONE KEY-ID"<<endl;
-      exit(1);
+      return 1;
     }
 
     DNSName zone(cmds[1]);
@@ -3020,6 +3188,11 @@ try
         return 1;
      }
      UeberBackend B("default");
+     DomainInfo di;
+     if (!B.getDomainInfo(zname, di)) {
+       cerr << "Domain '" << zname << "' does not exist" << endl;
+       return 1;
+     }
      std::vector<std::string> meta;
      if (!B.getDomainMetadata(zname, metaKey, meta)) {
        cerr << "Failure enabling TSIG key " << name << " for " << zname << endl;
@@ -3055,6 +3228,11 @@ try
      }
 
      UeberBackend B("default");
+     DomainInfo di;
+     if (!B.getDomainInfo(zname, di)) {
+       cerr << "Domain '" << zname << "' does not exist" << endl;
+       return 1;
+     }
      std::vector<std::string> meta;
      if (!B.getDomainMetadata(zname, metaKey, meta)) {
        cerr << "Failure disabling TSIG key " << name << " for " << zname << endl;
@@ -3078,8 +3256,8 @@ try
     }
     DNSName zone(cmds[1]);
     vector<string> keys;
-    DomainInfo di;
 
+    DomainInfo di;
     if (!B.getDomainInfo(zone, di)) {
        cerr << "Invalid zone '" << zone << "'" << endl;
        return 1;
@@ -3088,7 +3266,7 @@ try
     if (cmds.size() > 2) {
       keys.assign(cmds.begin() + 2, cmds.end());
       std::cout << "Metadata for '" << zone << "'" << endl;
-      for(const string kind :  keys) {
+      for(const auto& kind :  keys) {
         vector<string> meta;
         meta.clear();
         if (B.getDomainMetadata(zone, kind, meta)) {
@@ -3113,7 +3291,7 @@ try
     DNSName zone(cmds[1]);
     string kind = cmds[2];
     static vector<string> multiMetaWhitelist = {"ALLOW-AXFR-FROM", "ALLOW-DNSUPDATE-FROM",
-      "ALSO-NOTIFY", "TSIG-ALLOW-AXFR", "TSIG-ALLOW-DNSUPDATE", "GSS-ALLOW-AXFR-PRINCIPAL",
+      "ALSO-NOTIFY", "TSIG-ALLOW-AXFR", "TSIG-ALLOW-DNSUPDATE",
       "PUBLISH-CDS"};
     bool clobber = true;
     if (cmds[0] == "add-meta") {
@@ -3263,7 +3441,7 @@ try
          return 1;
       }
 
-      cerr << "Key of size " << bits << " created" << std::endl;
+      cerr << "Key of size " << dke->getBits() << " created" << std::endl;
       return 0;
     }
 #else
@@ -3308,19 +3486,8 @@ try
       DNSResourceRecord rr;
       cout<<"Processing '"<<di.zone<<"'"<<endl;
       // create zone
-      if (!tgt->createDomain(di.zone)) throw PDNSException("Failed to create zone");
+      if (!tgt->createDomain(di.zone, di.kind, di.masters, di.account)) throw PDNSException("Failed to create zone");
       if (!tgt->getDomainInfo(di.zone, di_new)) throw PDNSException("Failed to create zone");
-      tgt->setKind(di_new.zone, di.kind);
-      tgt->setAccount(di_new.zone,di.account);
-      string masters="";
-      bool first = true;
-      for(const auto& master: di.masters) {
-        if (!first)
-          masters += ", ";
-        first = false;
-        masters += master.toStringWithPortExcept(53);
-      }
-      tgt->setMaster(di_new.zone, masters);
       // move records
       if (!src->list(di.zone, di.id, true)) throw PDNSException("Failed to list records");
       nr=0;

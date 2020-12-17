@@ -33,6 +33,7 @@
 #include "dnssecinfra.hh"
 #include "dnsrecords.hh"
 #include "ueberbackend.hh"
+#include "lock.hh"
 
 using namespace ::boost::multi_index;
 
@@ -186,10 +187,12 @@ public:
 
   static uint64_t dbdnssecCacheSizes(const std::string& str);
   static void clearAllCaches();
+  static bool clearKeyCache(const DNSName& name);
+  static bool clearMetaCache(const DNSName& name);
   static void clearCaches(const DNSName& name);
 
   bool doesDNSSEC();
-  bool isSecuredZone(const DNSName& zone);
+  bool isSecuredZone(const DNSName& zone, bool useCache=true);
   keyset_t getEntryPoints(const DNSName& zname);
   keyset_t getKeys(const DNSName& zone, bool useCache = true);
   DNSSECPrivateKey getKeyById(const DNSName& zone, unsigned int id);
@@ -202,15 +205,15 @@ public:
   bool unpublishKey(const DNSName& zname, unsigned int id);
   bool checkKeys(const DNSName& zname, vector<string>* errorMessages = nullptr);
 
-  bool getNSEC3PARAM(const DNSName& zname, NSEC3PARAMRecordContent* n3p=0, bool* narrow=0);
+  bool getNSEC3PARAM(const DNSName& zname, NSEC3PARAMRecordContent* n3p=0, bool* narrow=0, bool useCache=true);
   bool checkNSEC3PARAM(const NSEC3PARAMRecordContent& ns3p, string& msg);
   bool setNSEC3PARAM(const DNSName& zname, const NSEC3PARAMRecordContent& n3p, const bool& narrow=false);
   bool unsetNSEC3PARAM(const DNSName& zname);
-  bool getPreRRSIGs(UeberBackend& db, const DNSName& signer, const DNSName& qname, const DNSName& wildcardname, const QType& qtype, DNSResourceRecord::Place, vector<DNSZoneRecord>& rrsigs, uint32_t signTTL);
-  bool isPresigned(const DNSName& zname);
+  void getPreRRSIGs(UeberBackend& db, vector<DNSZoneRecord>& rrs, uint32_t signTTL);
+  bool isPresigned(const DNSName& zname, bool useCache=true);
   bool setPresigned(const DNSName& zname);
   bool unsetPresigned(const DNSName& zname);
-  bool setPublishCDNSKEY(const DNSName& zname);
+  bool setPublishCDNSKEY(const DNSName& zname, bool deleteAlg);
   void getPublishCDNSKEY(const DNSName& zname, std::string& value);
   bool unsetPublishCDNSKEY(const DNSName& zname);
   bool setPublishCDS(const DNSName& zname, const string& digestAlgos);
@@ -232,14 +235,17 @@ public:
   
   void getFromMetaOrDefault(const DNSName& zname, const std::string& key, std::string& value, const std::string& defaultvalue);
   bool getFromMeta(const DNSName& zname, const std::string& key, std::string& value);
-  void getSoaEdit(const DNSName& zname, std::string& value);
+  void getSoaEdit(const DNSName& zname, std::string& value, bool useCache=true);
   bool unSecureZone(const DNSName& zone, std::string& error, std::string& info);
   bool rectifyZone(const DNSName& zone, std::string& error, std::string& info, bool doTransaction);
 
   static void setMaxEntries(size_t maxEntries);
 
+  typedef std::map<std::string, std::vector<std::string> > METAValues;
 private:
+  bool getFromMetaNoCache(const DNSName& name, const std::string& kind, std::string& value);
 
+  int64_t d_metaCacheCleanAction{0};
 
   struct KeyCacheEntry
   {
@@ -257,16 +263,14 @@ private:
   
   struct METACacheEntry
   {
-    uint32_t getTTD() const
+    time_t getTTD() const
     {
       return d_ttd;
     }
-  
+
     DNSName d_domain;
-    mutable std::string d_key, d_value;
-    mutable bool d_isset;
-    unsigned int d_ttd;
-  
+    mutable METAValues d_value;
+    time_t d_ttd;
   };
   
   struct KeyCacheTag{};
@@ -284,12 +288,7 @@ private:
   typedef multi_index_container<
     METACacheEntry,
     indexed_by<
-      ordered_unique<tag<CompositeTag>,
-        composite_key< 
-          METACacheEntry, 
-          member<METACacheEntry, DNSName, &METACacheEntry::d_domain> ,
-          member<METACacheEntry, std::string, &METACacheEntry::d_key>
-        >, composite_key_compare<std::less<DNSName>, CIStringCompare> >,
+      ordered_unique<member<METACacheEntry, DNSName, &METACacheEntry::d_domain> >,
       sequenced<tag<SequencedTag>>
     >
   > metacache_t;
@@ -298,8 +297,9 @@ private:
 
   static keycache_t s_keycache;
   static metacache_t s_metacache;
-  static pthread_rwlock_t s_metacachelock;
-  static pthread_rwlock_t s_keycachelock;
+  static int64_t s_metaCacheCleanActions;
+  static ReadWriteLock s_metacachelock;
+  static ReadWriteLock s_keycachelock;
   static AtomicCounter s_ops;
   static time_t s_last_prune;
   static size_t s_maxEntries;

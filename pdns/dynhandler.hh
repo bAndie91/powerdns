@@ -54,4 +54,4 @@ string DLNotifyRetrieveHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLCurrentConfigHandler(const vector<string>&parts, Utility::pid_t ppid);
 string DLListZones(const vector<string>&parts, Utility::pid_t ppid);
 string DLTokenLogin(const vector<string>&parts, Utility::pid_t ppid);
-uint64_t udpErrorStats(const std::string& str);
+string DLSuckRequests(const vector<string> &parts, Utility::pid_t ppid);

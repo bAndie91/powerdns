@@ -25,9 +25,11 @@
 
 StatBag S;
 
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size);
+
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
-  if (size > std::numeric_limits<uint16_t>::max()) {
+  if (size > std::numeric_limits<uint16_t>::max() || size < sizeof(dnsheader)) {
     return 0;
   }
 
@@ -35,7 +37,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   /* auth's version */
   try {
-    PacketCache::canHashPacket(input);
+    static const std::unordered_set<uint16_t> optionsToIgnore{ EDNSOptionCode::COOKIE };
+
+    PacketCache::canHashPacket(input, false);
+    DNSName qname(input.data(), input.size(), sizeof(dnsheader), false);
+    PacketCache::queryMatches(input, input, qname, optionsToIgnore);
   }
   catch(const std::exception& e) {
   }
@@ -44,9 +50,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   /* recursor's version */
   try {
-    uint16_t ecsBegin = 0;
-    uint16_t ecsEnd = 0;
-    PacketCache::canHashPacket(input, &ecsBegin, &ecsEnd);
+    static const std::unordered_set<uint16_t> optionsToIgnore{ EDNSOptionCode::COOKIE, EDNSOptionCode::ECS };
+
+    PacketCache::canHashPacket(input, true);
+    DNSName qname(input.data(), input.size(), sizeof(dnsheader), false);
+    PacketCache::queryMatches(input, input, qname, optionsToIgnore);
   }
   catch(const std::exception& e) {
   }

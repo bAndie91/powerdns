@@ -36,6 +36,7 @@
 #include "dnsname.hh"
 #include "pdnsexception.hh"
 #include "iputils.hh"
+#include "svc-records.hh"
 
 /** DNS records have three representations:
     1) in the packet
@@ -50,7 +51,6 @@
     And we might be able to reverse 2 -> 3 as well
 */
     
-#include "namespaces.hh"
 #include "namespaces.hh"
 
 class MOADNSException : public runtime_error
@@ -152,6 +152,7 @@ public:
   void xfrBlobNoSpaces(string& blob, int len);
   void xfrBlob(string& blob, int length);
   void xfrHexBlob(string& blob, bool keepReading=false);
+  void xfrSvcParamKeyVals(set<SvcParam> &kvs);
 
   void getDnsrecordheader(struct dnsrecordheader &ah);
   void copyRecord(vector<unsigned char>& dest, uint16_t len);
@@ -181,7 +182,7 @@ private:
   uint16_t d_pos;
   uint16_t d_startrecordpos; // needed for getBlob later on
   uint16_t d_recordlen;      // ditto
-  uint16_t not_used; // Aligns the whole class on 8-byte boundries
+  uint16_t not_used; // Aligns the whole class on 8-byte boundaries
   const std::string& d_content;
 };
 
@@ -193,6 +194,7 @@ public:
   static std::shared_ptr<DNSRecordContent> mastermake(const DNSRecord &dr, PacketReader& pr);
   static std::shared_ptr<DNSRecordContent> mastermake(const DNSRecord &dr, PacketReader& pr, uint16_t opcode);
   static std::shared_ptr<DNSRecordContent> mastermake(uint16_t qtype, uint16_t qclass, const string& zone);
+  static string upgradeContent(const DNSName& qname, const QType qtype, const string& content);
 
   virtual std::string getZoneRepresentation(bool noDot=false) const = 0;
   virtual ~DNSRecordContent() {}
@@ -220,7 +222,7 @@ public:
     return typeid(*this)==typeid(rhs) && this->getZoneRepresentation() == rhs.getZoneRepresentation();
   }
   
-  static shared_ptr<DNSRecordContent> unserialize(const DNSName& qname, uint16_t qtype, const string& serialized);
+  static shared_ptr<DNSRecordContent> deserialize(const DNSName& qname, uint16_t qtype, const string& serialized);
 
   void doRecordCheck(const struct DNSRecord&){}
 
@@ -245,13 +247,18 @@ public:
     getZmakermap().erase(key);
   }
 
+  static bool isUnknownType(const string& name)
+  {
+    return boost::starts_with(name, "TYPE") || boost::starts_with(name, "type");
+  }
+
   static uint16_t TypeToNumber(const string& name)
   {
     n2typemap_t::const_iterator iter = getN2Typemap().find(toUpper(name));
     if(iter != getN2Typemap().end())
       return iter->second.second;
     
-    if(boost::starts_with(name, "TYPE") || boost::starts_with(name, "type"))
+    if (isUnknownType(name))
       return (uint16_t) pdns_stou(name.substr(4));
     
     throw runtime_error("Unknown DNS type '"+name+"'");
@@ -355,6 +362,28 @@ struct DNSZoneRecord
   DNSRecord dr;
 };
 
+class UnknownRecordContent : public DNSRecordContent
+{
+public:
+  UnknownRecordContent(const DNSRecord& dr, PacketReader& pr)
+    : d_dr(dr)
+  {
+    pr.copyRecord(d_record, dr.d_clen);
+  }
+
+  UnknownRecordContent(const string& zone);
+
+  string getZoneRepresentation(bool noDot) const override;
+  void toPacket(DNSPacketWriter& pw) override;
+  uint16_t getType() const override
+  {
+    return d_dr.d_type;
+  }
+
+private:
+  DNSRecord d_dr;
+  vector<uint8_t> d_record;
+};
 
 //! This class can be used to parse incoming packets, and is copyable
 class MOADNSParser : public boost::noncopyable
@@ -386,6 +415,9 @@ public:
   {
     return d_tsigPos;
   }
+
+  bool hasEDNS() const;
+
 private:
   void init(bool query, const std::string& packet);
   uint16_t d_tsigPos;
