@@ -1,3 +1,15 @@
+pdns (4.4.0-1) unstable; urgency=medium
+
+  * New upstream version 4.4.0 (Closes: #975590)
+  * Remove upstream-applied patches
+  * Bump Standards-Version to 4.5.1
+  * Build with luajit on amd64, and Lua 5.1 on other archs.
+    Once #908137 is fixed, we should enable luajit on arm64 too.
+    Unfortunately we were building with Lua 5.3 earlier, so this
+    is a feature "regression" of sorts - but it can be much faster.
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Thu, 17 Dec 2020 20:51:32 +0000
+
 pdns (4.3.1-2) unstable; urgency=medium
 
   * Apply upstream patch to improve MySQL 8 character handling
