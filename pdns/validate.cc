@@ -11,15 +11,47 @@ uint16_t g_maxNSEC3Iterations{0};
 
 #define LOG(x) if(g_dnssecLOG) { g_log <<Logger::Warning << x; }
 
-const char *dStates[]={"nodata", "nxdomain", "nxqtype", "empty non-terminal", "insecure", "opt-out"};
-const char *vStates[]={"Indeterminate", "Bogus", "Insecure", "Secure", "NTA", "TA"};
+static bool isAZoneKey(const DNSKEYRecordContent& key)
+{
+  /* rfc4034 Section 2.1.1:
+     "Bit 7 of the Flags field is the Zone Key flag.  If bit 7 has value 1,
+     then the DNSKEY record holds a DNS zone key, and the DNSKEY RR's
+     owner name MUST be the name of a zone.  If bit 7 has value 0, then
+     the DNSKEY record holds some other type of DNS public key and MUST
+     NOT be used to verify RRSIGs that cover RRsets."
+
+     Let's check that this is a ZONE key, even though there is no other
+     types of DNSKEYs at the moment.
+  */
+  return (key.d_flags & 256) != 0;
+}
+
+static bool isRevokedKey(const DNSKEYRecordContent& key)
+{
+  /* rfc5011 Section 3 */
+  return (key.d_flags & 128) != 0;
+}
 
 static vector<shared_ptr<DNSKEYRecordContent > > getByTag(const skeyset_t& keys, uint16_t tag, uint8_t algorithm)
 {
   vector<shared_ptr<DNSKEYRecordContent>> ret;
-  for(const auto& key : keys)
-    if(key->d_protocol == 3 && key->getTag() == tag && key->d_algorithm == algorithm)
+
+  for (const auto& key : keys) {
+    if (!isAZoneKey(*key)) {
+      LOG("Key for tag "<<std::to_string(tag)<<" and algorithm "<<std::to_string(algorithm)<<" is not a zone key, skipping"<<endl;);
+      continue;
+    }
+
+    if (isRevokedKey(*key)) {
+      LOG("Key for tag "<<std::to_string(tag)<<" and algorithm "<<std::to_string(algorithm)<<" has been revoked, skipping"<<endl;);
+      continue;
+    }
+
+    if (key->d_protocol == 3 && key->getTag() == tag && key->d_algorithm == algorithm) {
       ret.push_back(key);
+    }
+  }
+
   return ret;
 }
 
@@ -334,19 +366,19 @@ static bool provesNSEC3NoWildCard(DNSName wildcard, uint16_t const qtype, const 
 /*
   This function checks whether the existence of qname|qtype is denied by the NSEC and NSEC3
   in validrrsets.
-  - If `referralToUnsigned` is true and qtype is QType::DS, this functions returns NODATA
+  - If `referralToUnsigned` is true and qtype is QType::DS, this functions returns NODENIAL
   if a NSEC or NSEC3 proves that the name exists but no NS type exists, as specified in RFC 5155 section 8.9.
   - If `wantsNoDataProof` is set but a NSEC proves that the whole name does not exist, the function will return
   NXQTYPE is the name is proven to be ENT and NXDOMAIN otherwise.
   - If `needWildcardProof` is false, the proof that a wildcard covering this qname|qtype is not checked. It is
-  useful when we have a positive answer synthetized from a wildcard and we only need to prove that the exact
+  useful when we have a positive answer synthesized from a wildcard and we only need to prove that the exact
   name does not exist.
 */
 dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16_t qtype, bool referralToUnsigned, bool wantsNoDataProof, bool needWildcardProof, unsigned int wildcardLabelsCount)
 {
   bool nsec3Seen = false;
   if (!needWildcardProof && wildcardLabelsCount == 0) {
-    throw PDNSException("Invalid wildcard labels count for the validation of a positive answer synthetized from a wildcard");
+    throw PDNSException("Invalid wildcard labels count for the validation of a positive answer synthesized from a wildcard");
   }
 
   for(const auto& v : validrrsets) {
@@ -374,14 +406,14 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
           LOG("type is "<<QType(qtype).getName()<<", NS is "<<std::to_string(nsec->isSet(QType::NS))<<", SOA is "<<std::to_string(nsec->isSet(QType::SOA))<<", signer is "<<signer<<", owner name is "<<owner<<endl);
           /* this is an "ancestor delegation" NSEC RR */
           LOG("An ancestor delegation NSEC RR can only deny the existence of a DS"<<endl);
-          return NODATA;
+          return dState::NODENIAL;
         }
 
         /* check if the type is denied */
         if(qname == owner) {
           if (nsec->isSet(qtype)) {
             LOG("Does _not_ deny existence of type "<<QType(qtype).getName()<<endl);
-            return NODATA;
+            return dState::NODENIAL;
           }
 
           LOG("Denies existence of type "<<QType(qtype).getName()<<endl);
@@ -389,7 +421,7 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
           /* RFC 6840 section 4.3 */
           if (nsec->isSet(QType::CNAME)) {
             LOG("However a CNAME exists"<<endl);
-            return NODATA;
+            return dState::NODENIAL;
           }
 
           /*
@@ -400,7 +432,7 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
            */
           if (referralToUnsigned && qtype == QType::DS && !nsec->isSet(QType::NS)) {
             LOG("However, no NS record exists at this level!"<<endl);
-            return NODATA;
+            return dState::NODENIAL;
           }
 
           /* we know that the name exists (but this qtype doesn't) so except
@@ -411,44 +443,52 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
           }
 
           if (!needWildcardProof || provesNoWildCard(qname, qtype, validrrsets)) {
-            return NXQTYPE;
+            return dState::NXQTYPE;
           }
 
           LOG("But the existence of a wildcard is not denied for "<<qname<<"/"<<endl);
-          return NODATA;
+          return dState::NODENIAL;
         }
 
         /* check if the whole NAME is denied existing */
-        if(isCoveredByNSEC(qname, owner, nsec->d_next)) {
+        if (isCoveredByNSEC(qname, owner, nsec->d_next)) {
           LOG(qname<<" is covered ");
-          /* if the name is an ENT and we received a NODATA answer,
-             we are fine with a NSEC proving that the name does not exist. */
-          if (wantsNoDataProof && nsecProvesENT(qname, owner, nsec->d_next)) {
-            LOG("Denies existence of type "<<qname<<"/"<<QType(qtype).getName()<<" by proving that "<<qname<<" is an ENT"<<endl);
-            return NXQTYPE;
+
+          if (nsecProvesENT(qname, owner, nsec->d_next)) {
+            if (wantsNoDataProof) {
+              /* if the name is an ENT and we received a NODATA answer,
+                 we are fine with a NSEC proving that the name does not exist. */
+              LOG("Denies existence of type "<<qname<<"/"<<QType(qtype).getName()<<" by proving that "<<qname<<" is an ENT"<<endl);
+              return dState::NXQTYPE;
+            }
+            else {
+              /* but for a NXDOMAIN proof, this doesn't make sense! */
+              LOG("but it tries to deny the existence of "<<qname<<" by proving that "<<qname<<" is an ENT, this does not make sense!"<<endl);
+              return dState::NODENIAL;
+            }
           }
 
           if (!needWildcardProof) {
             LOG("and we did not need a wildcard proof"<<endl);
-            return NXDOMAIN;
+            return dState::NXDOMAIN;
           }
 
           LOG("but we do need a wildcard proof so ");
           if (wantsNoDataProof) {
             LOG("looking for NODATA proof"<<endl);
             if (provesNoDataWildCard(qname, qtype, validrrsets)) {
-              return NXQTYPE;
+              return dState::NXQTYPE;
             }
           }
           else {
             LOG("looking for NO wildcard proof"<<endl);
             if (provesNoWildCard(qname, qtype, validrrsets)) {
-              return NXDOMAIN;
+              return dState::NXDOMAIN;
             }
           }
 
           LOG("But the existence of a wildcard is not denied for "<<qname<<"/"<<QType(qtype).getName()<<endl);
-          return NODATA;
+          return dState::NODENIAL;
         }
 
         LOG("Did not deny existence of "<<QType(qtype).getName()<<", "<<owner<<"?="<<qname<<", "<<nsec->isSet(qtype)<<", next: "<<nsec->d_next<<endl);
@@ -469,7 +509,7 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
         string h = getHashFromNSEC3(qname, nsec3);
         if (h.empty()) {
           LOG("Unsupported hash, ignoring"<<endl);
-          return INSECURE;
+          return dState::INSECURE;
         }
 
         nsec3Seen = true;
@@ -488,14 +528,14 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
           LOG("type is "<<QType(qtype).getName()<<", NS is "<<std::to_string(nsec3->isSet(QType::NS))<<", SOA is "<<std::to_string(nsec3->isSet(QType::SOA))<<", signer is "<<signer<<", owner name is "<<v.first.first<<endl);
           /* this is an "ancestor delegation" NSEC3 RR */
           LOG("An ancestor delegation NSEC3 RR can only deny the existence of a DS"<<endl);
-          return NODATA;
+          return dState::NODENIAL;
         }
 
         // If the name exists, check if the qtype is denied
         if(beginHash == h) {
           if (nsec3->isSet(qtype)) {
             LOG("Does _not_ deny existence of type "<<QType(qtype).getName()<<" for name "<<qname<<" (not opt-out)."<<endl);
-            return NODATA;
+            return dState::NODENIAL;
           }
 
           LOG("Denies existence of type "<<QType(qtype).getName()<<" for name "<<qname<<" (not opt-out)."<<endl);
@@ -503,7 +543,7 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
           /* RFC 6840 section 4.3 */
           if (nsec3->isSet(QType::CNAME)) {
             LOG("However a CNAME exists"<<endl);
-            return NODATA;
+            return dState::NODENIAL;
           }
 
           /*
@@ -515,10 +555,10 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
            */
           if (referralToUnsigned && qtype == QType::DS && !nsec3->isSet(QType::NS)) {
             LOG("However, no NS record exists at this level!"<<endl);
-            return NODATA;
+            return dState::NODENIAL;
           }
 
-          return NXQTYPE;
+          return dState::NXQTYPE;
         }
       }
     }
@@ -526,7 +566,7 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
 
   /* if we have no NSEC3 records, we are done */
   if (!nsec3Seen) {
-    return NODATA;
+    return dState::NODENIAL;
   }
 
   DNSName closestEncloser(qname);
@@ -556,7 +596,7 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
 
             string h = getHashFromNSEC3(closestEncloser, nsec3);
             if (h.empty()) {
-              return INSECURE;
+              return dState::INSECURE;
             }
 
             string beginHash=fromBase32Hex(v.first.first.getRawLabels()[0]);
@@ -617,7 +657,7 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
 
             string h = getHashFromNSEC3(nextCloser, nsec3);
             if (h.empty()) {
-              return INSECURE;
+              return dState::INSECURE;
             }
 
             string beginHash=fromBase32Hex(v.first.first.getRawLabels()[0]);
@@ -650,24 +690,24 @@ dState getDenial(const cspmap_t &validrrsets, const DNSName& qname, const uint16
     if (needWildcardProof && !provesNSEC3NoWildCard(closestEncloser, qtype, validrrsets, &wildcardExists)) {
       if (!isOptOut) {
         LOG("But the existence of a wildcard is not denied for "<<qname<<"/"<<QType(qtype).getName()<<endl);
-        return NODATA;
+        return dState::NODENIAL;
       }
     }
 
     if (isOptOut) {
-      return OPTOUT;
+      return dState::OPTOUT;
     }
     else {
       if (wildcardExists) {
-        return NXQTYPE;
+        return dState::NXQTYPE;
       }
-      return NXDOMAIN;
+      return dState::NXDOMAIN;
     }
   }
 
   // There were no valid NSEC(3) records
   // XXX maybe this should be INSECURE... it depends on the semantics of this function
-  return NODATA;
+  return dState::NODENIAL;
 }
 
 /*
@@ -693,7 +733,7 @@ static const vector<DNSName> getZoneCuts(const DNSName& begin, const DNSName& en
     qname.prependRawLabel(labelsToAdd.back());
     labelsToAdd.pop_back();
     auto records = dro.get(qname, (uint16_t)QType::NS);
-    for (const auto record : records) {
+    for (const auto& record : records) {
       if(record.d_type != QType::NS || record.d_name != qname)
         continue;
       foundCut = true;
@@ -705,9 +745,14 @@ static const vector<DNSName> getZoneCuts(const DNSName& begin, const DNSName& en
   return ret;
 }
 
-bool isRRSIGNotExpired(const time_t now, const shared_ptr<RRSIGRecordContent> sig)
+bool isRRSIGNotExpired(const time_t now, const shared_ptr<RRSIGRecordContent>& sig)
 {
-  return sig->d_siginception - g_signatureInceptionSkew <= now && sig->d_sigexpire >= now;
+  return sig->d_sigexpire >= now;
+}
+
+bool isRRSIGIncepted(const time_t now, const shared_ptr<RRSIGRecordContent>& sig)
+{
+  return sig->d_siginception - g_signatureInceptionSkew <= now;
 }
 
 static bool checkSignatureWithKey(time_t now, const shared_ptr<RRSIGRecordContent> sig, const shared_ptr<DNSKEYRecordContent> key, const std::string& msg)
@@ -718,7 +763,7 @@ static bool checkSignatureWithKey(time_t now, const shared_ptr<RRSIGRecordConten
        - The validator's notion of the current time MUST be less than or equal to the time listed in the RRSIG RR's Expiration field.
        - The validator's notion of the current time MUST be greater than or equal to the time listed in the RRSIG RR's Inception field.
     */
-    if(isRRSIGNotExpired(now, sig)) {
+    if (isRRSIGIncepted(now, sig) && isRRSIGNotExpired(now, sig)) {
       std::shared_ptr<DNSCryptoKeyEngine> dke = shared_ptr<DNSCryptoKeyEngine>(DNSCryptoKeyEngine::makeFromPublicKeyString(key->d_algorithm, key->d_key));
       result = dke->verify(msg, sig->d_signature);
       LOG("signature by key with tag "<<sig->d_tag<<" and algorithm "<<DNSSECKeeper::algorithm2name(sig->d_algorithm)<<" was " << (result ? "" : "NOT ")<<"valid"<<endl);
@@ -727,15 +772,18 @@ static bool checkSignatureWithKey(time_t now, const shared_ptr<RRSIGRecordConten
       LOG("Signature is "<<((sig->d_siginception - g_signatureInceptionSkew > now) ? "not yet valid" : "expired")<<" (inception: "<<sig->d_siginception<<", inception skew: "<<g_signatureInceptionSkew<<", expiration: "<<sig->d_sigexpire<<", now: "<<now<<")"<<endl);
     }
   }
-  catch(const std::exception& e) {
+  catch (const std::exception& e) {
     LOG("Could not make a validator for signature: "<<e.what()<<endl);
   }
   return result;
 }
 
-bool validateWithKeySet(time_t now, const DNSName& name, const sortedRecords_t& toSign, const vector<shared_ptr<RRSIGRecordContent> >& signatures, const skeyset_t& keys, bool validateAllSigs)
+vState validateWithKeySet(time_t now, const DNSName& name, const sortedRecords_t& toSign, const vector<shared_ptr<RRSIGRecordContent> >& signatures, const skeyset_t& keys, bool validateAllSigs)
 {
+  bool foundKey = false;
   bool isValid = false;
+  bool allExpired = true;
+  bool noneIncepted = true;
 
   for(const auto& signature : signatures) {
     unsigned int labelCount = name.countLabels();
@@ -743,17 +791,19 @@ bool validateWithKeySet(time_t now, const DNSName& name, const sortedRecords_t& 
       LOG(name<<": Discarding invalid RRSIG whose label count is "<<signature->d_labels<<" while the RRset owner name has only "<<labelCount<<endl);
     }
 
-    auto r = getByTag(keys, signature->d_tag, signature->d_algorithm);
+    auto keysMatchingTag = getByTag(keys, signature->d_tag, signature->d_algorithm);
 
-    if(r.empty()) {
+    if (keysMatchingTag.empty()) {
       LOG("No key provided for "<<signature->d_tag<<" and algorithm "<<std::to_string(signature->d_algorithm)<<endl;);
       continue;
     }
 
-    string msg=getMessageForRRSET(name, *signature, toSign, true);
-    for(const auto& l : r) {
-      bool signIsValid = checkSignatureWithKey(now, signature, l, msg);
-      if(signIsValid) {
+    string msg = getMessageForRRSET(name, *signature, toSign, true);
+    for (const auto& key : keysMatchingTag) {
+      bool signIsValid = checkSignatureWithKey(now, signature, key, msg);
+      foundKey = true;
+
+      if (signIsValid) {
         isValid = true;
         LOG("Validated "<<name<<"/"<<DNSRecordContent::NumberToType(signature->d_type)<<endl);
         //	  cerr<<"valid"<<endl;
@@ -761,14 +811,34 @@ bool validateWithKeySet(time_t now, const DNSName& name, const sortedRecords_t& 
       }
       else {
         LOG("signature invalid"<<endl);
+        if (isRRSIGIncepted(now, signature)) {
+          noneIncepted = false;
+        }
+        if (isRRSIGNotExpired(now, signature)) {
+          allExpired = false;
+        }
       }
+
       if (signIsValid && !validateAllSigs) {
-        return true;
+        return vState::Secure;
       }
     }
   }
 
-  return isValid;
+  if (isValid) {
+    return vState::Secure;
+  }
+  if (!foundKey) {
+    return vState::BogusNoValidRRSIG;
+  }
+  if (noneIncepted) {
+    return vState::BogusSignatureNotYetValid;
+  }
+  if (allExpired) {
+    return vState::BogusSignatureExpired;
+  }
+
+  return vState::BogusNoValidRRSIG;
 }
 
 void validateWithKeySet(const cspmap_t& rrsets, cspmap_t& validated, const skeyset_t& keys)
@@ -782,7 +852,7 @@ void validateWithKeySet(const cspmap_t& rrsets, cspmap_t& validated, const skeys
   time_t now = time(nullptr);
   for(auto i=rrsets.cbegin(); i!=rrsets.cend(); i++) {
     LOG("validating "<<(i->first.first)<<"/"<<DNSRecordContent::NumberToType(i->first.second)<<" with "<<i->second.signatures.size()<<" sigs"<<endl);
-    if (validateWithKeySet(now, i->first.first, i->second.records, i->second.signatures, keys, true)) {
+    if (validateWithKeySet(now, i->first.first, i->second.records, i->second.signatures, keys, true) == vState::Secure) {
       validated[i->first] = i->second;
     }
   }
@@ -838,18 +908,18 @@ bool haveNegativeTrustAnchor(const map<DNSName,std::string>& negAnchors, const D
   return true;
 }
 
-void validateDNSKeysAgainstDS(time_t now, const DNSName& zone, const dsmap_t& dsmap, const skeyset_t& tkeys, const sortedRecords_t& toSign, const vector<shared_ptr<RRSIGRecordContent> >& sigs, skeyset_t& validkeys)
+vState validateDNSKeysAgainstDS(time_t now, const DNSName& zone, const dsmap_t& dsmap, const skeyset_t& tkeys, const sortedRecords_t& toSign, const vector<shared_ptr<RRSIGRecordContent> >& sigs, skeyset_t& validkeys)
 {
   /*
    * Check all DNSKEY records against all DS records and place all DNSKEY records
    * that have DS records (that we support the algo for) in the tentative key storage
    */
-  for(auto const& dsrc : dsmap)
+  for (const auto& dsrc : dsmap)
   {
     auto r = getByTag(tkeys, dsrc.d_tag, dsrc.d_algorithm);
     // cerr<<"looking at DS with tag "<<dsrc.d_tag<<", algo "<<DNSSECKeeper::algorithm2name(dsrc.d_algorithm)<<", digest "<<std::to_string(dsrc.d_digesttype)<<" for "<<zone<<", got "<<r.size()<<" DNSKEYs for tag"<<endl;
 
-    for(const auto& drc : r)
+    for (const auto& drc : r)
     {
       bool isValid = false;
       bool dsCreated = false;
@@ -859,11 +929,11 @@ void validateDNSKeysAgainstDS(time_t now, const DNSName& zone, const dsmap_t& ds
         dsCreated = true;
         isValid = dsrc == dsrc2;
       }
-      catch(const std::exception &e) {
+      catch (const std::exception &e) {
         LOG("Unable to make DS from DNSKey: "<<e.what()<<endl);
       }
 
-      if(isValid) {
+      if (isValid) {
         LOG("got valid DNSKEY (it matches the DS) with tag "<<dsrc.d_tag<<" and algorithm "<<std::to_string(dsrc.d_algorithm)<<" for "<<zone<<endl);
 
         validkeys.insert(drc);
@@ -876,21 +946,16 @@ void validateDNSKeysAgainstDS(time_t now, const DNSName& zone, const dsmap_t& ds
     }
   }
 
-  vector<uint16_t> toSignTags;
-  for (const auto& key : tkeys) {
-    toSignTags.push_back(key->getTag());
-  }
-
   //    cerr<<"got "<<validkeys.size()<<"/"<<tkeys.size()<<" valid/tentative keys"<<endl;
   // these counts could be off if we somehow ended up with
   // duplicate keys. Should switch to a type that prevents that.
-  if(validkeys.size() < tkeys.size())
+  if (validkeys.size() < tkeys.size())
   {
     // this should mean that we have one or more DS-validated DNSKEYs
     // but not a fully validated DNSKEY set, yet
     // one of these valid DNSKEYs should be able to validate the
     // whole set
-    for(const auto& sig : sigs)
+    for (const auto& sig : sigs)
     {
       //        cerr<<"got sig for keytag "<<i->d_tag<<" matching "<<getByTag(tkeys, i->d_tag).size()<<" keys of which "<<getByTag(validkeys, i->d_tag).size()<<" valid"<<endl;
       auto bytag = getByTag(validkeys, sig->d_tag, sig->d_algorithm);
@@ -900,11 +965,11 @@ void validateDNSKeysAgainstDS(time_t now, const DNSName& zone, const dsmap_t& ds
       }
 
       string msg = getMessageForRRSET(zone, *sig, toSign);
-      for(const auto& key : bytag) {
+      for (const auto& key : bytag) {
         //          cerr<<"validating : ";
         bool signIsValid = checkSignatureWithKey(now, sig, key, msg);
 
-        if(signIsValid)
+        if (signIsValid)
         {
           LOG("validation succeeded - whole DNSKEY set is valid"<<endl);
           validkeys = tkeys;
@@ -917,6 +982,64 @@ void validateDNSKeysAgainstDS(time_t now, const DNSName& zone, const dsmap_t& ds
       //        if(validkeys.empty()) cerr<<"did not manage to validate DNSKEY set based on DS-validated KSK, only passing KSK on"<<endl;
     }
   }
+
+  if (validkeys.size() < tkeys.size()) {
+    /* so we failed to validate the whole set, let's try to find out why exactly */
+    bool dnskeyAlgoSupported = false;
+    bool dsDigestSupported = false;
+
+    for (const auto& dsrc : dsmap)
+    {
+      if (DNSCryptoKeyEngine::isAlgorithmSupported(dsrc.d_algorithm)) {
+        dnskeyAlgoSupported = true;
+        if (DNSCryptoKeyEngine::isDigestSupported(dsrc.d_digesttype)) {
+          dsDigestSupported = true;
+        }
+      }
+    }
+
+    if (!dnskeyAlgoSupported) {
+      return vState::BogusUnsupportedDNSKEYAlgo;
+    }
+    if (!dsDigestSupported) {
+      return vState::BogusUnsupportedDSDigestType;
+    }
+
+    bool zoneKey = false;
+    bool notRevoked = false;
+    bool validProtocol = false;
+
+    for (const auto& key : tkeys) {
+      if (!isAZoneKey(*key)) {
+        continue;
+      }
+      zoneKey = true;
+
+      if (isRevokedKey(*key)) {
+        continue;
+      }
+      notRevoked = true;
+
+      if (key->d_protocol != 3) {
+        continue;
+      }
+      validProtocol = true;
+    }
+
+    if (!zoneKey) {
+      return vState::BogusNoZoneKeyBitSet;
+    }
+    if (!notRevoked) {
+      return vState::BogusRevokedDNSKEY;
+    }
+    if (!validProtocol) {
+      return vState::BogusInvalidDNSKEYProtocol;
+    }
+
+    return vState::BogusNoValidDNSKEY;
+  }
+
+  return vState::Secure;
 }
 
 vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, skeyset_t& keyset)
@@ -924,7 +1047,7 @@ vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, skeyset_t& keyset)
   auto luaLocal = g_luaconfs.getLocal();
   const auto anchors = luaLocal->dsAnchors;
   if (anchors.empty()) // Nothing to do here
-    return Insecure;
+    return vState::Insecure;
 
   // Determine the lowest (i.e. with the most labels) Trust Anchor for zone
   DNSName lowestTA(".");
@@ -953,7 +1076,7 @@ vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, skeyset_t& keyset)
        */
       if(lowestTA.countLabels() <= lowestNTA.countLabels()) {
         LOG("marking answer Insecure"<<endl);
-        return NTA; // Not Insecure, this way validateRecords() can shortcut
+        return vState::NTA; // Not Insecure, this way validateRecords() can shortcut
       }
       LOG("but a Trust Anchor for "<<lowestTA<<" is configured, continuing validation."<<endl);
     }
@@ -1015,19 +1138,19 @@ vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, skeyset_t& keyset)
      * Check all DNSKEY records against all DS records and place all DNSKEY records
      * that have DS records (that we support the algo for) in the tentative key storage
      */
-    validateDNSKeysAgainstDS(time(nullptr), *zoneCutIter, dsmap, tkeys, toSign, sigs, validkeys);
+    auto state = validateDNSKeysAgainstDS(time(nullptr), *zoneCutIter, dsmap, tkeys, toSign, sigs, validkeys);
 
-    if(validkeys.empty())
+    if (validkeys.empty())
     {
       LOG("ended up with zero valid DNSKEYs, going Bogus"<<endl);
-      return Bogus;
+      return state;
     }
     LOG("situation: we have one or more valid DNSKEYs for ["<<*zoneCutIter<<"] (want ["<<zone<<"])"<<endl);
 
-    if(zoneCutIter == zoneCuts.cend()-1) {
+    if (zoneCutIter == zoneCuts.cend()-1) {
       LOG("requested keyset found! returning Secure for the keyset"<<endl);
       keyset.insert(validkeys.cbegin(), validkeys.cend());
-      return Secure;
+      return state;
     }
 
     // We now have the DNSKEYs, use them to validate the DS records at the next zonecut
@@ -1050,10 +1173,10 @@ vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, skeyset_t& keyset)
     if(r.first == r.second) {
       LOG("No DS for "<<*(zoneCutIter+1)<<", now look for a secure denial"<<endl);
       dState res = getDenial(validrrsets, *(zoneCutIter+1), QType::DS, true, true);
-      if (res == INSECURE || res == NXDOMAIN)
-        return Bogus;
-      if (res == NXQTYPE || res == OPTOUT)
-        return Insecure;
+      if (res == dState::INSECURE || res == dState::NXDOMAIN)
+        return vState::BogusInvalidDenial;
+      if (res == dState::NXQTYPE || res == dState::OPTOUT)
+        return vState::Insecure;
     }
 
     /*
@@ -1070,7 +1193,7 @@ vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, skeyset_t& keyset)
     }
   }
   // There were no zone cuts (aka, we should never get here)
-  return Bogus;
+  return vState::BogusUnableToGetDNSKEYs;
 }
 
 bool isSupportedDS(const DSRecordContent& ds)
@@ -1090,11 +1213,51 @@ bool isSupportedDS(const DSRecordContent& ds)
 
 DNSName getSigner(const std::vector<std::shared_ptr<RRSIGRecordContent> >& signatures)
 {
-  for (const auto sig : signatures) {
+  for (const auto& sig : signatures) {
     if (sig) {
       return sig->d_signer;
     }
   }
 
   return DNSName();
+}
+
+const std::string& vStateToString(vState state)
+{
+  static const std::vector<std::string> vStates = {"Indeterminate", "Insecure", "Secure", "NTA", "TA", "Bogus - No valid DNSKEY", "Bogus - Invalid denial", "Bogus - Unable to get DSs", "Bogus - Unable to get DNSKEYs", "Bogus - Self Signed DS", "Bogus - No RRSIG", "Bogus - No valid RRSIG", "Bogus - Missing negative indication", "Bogus - Signature not yet valid", "Bogus - Signature expired", "Bogus - Unsupported DNSKEY algorithm", "Bogus - Unsuuported DS digest type", "Bogus - No zone key bit set", "Bogus - Revoked DNSKEY", "Bogus - Invalid DNSKEY Protocol" };
+  return vStates.at(static_cast<size_t>(state));
+}
+
+std::ostream& operator<<(std::ostream &os, const vState d)
+{
+  os<<vStateToString(d);
+  return os;
+}
+
+std::ostream& operator<<(std::ostream &os, const dState d)
+{
+  static const std::vector<std::string> dStates = {"no denial", "nxdomain", "nxqtype", "empty non-terminal", "insecure", "opt-out"};
+  os<<dStates.at(static_cast<size_t>(d));
+  return os;
+}
+
+void updateDNSSECValidationState(vState& state, const vState stateUpdate)
+{
+  if (stateUpdate == vState::TA) {
+    state = vState::Secure;
+  }
+  else if (stateUpdate == vState::NTA) {
+    state = vState::Insecure;
+  }
+  else if (vStateIsBogus(stateUpdate)) {
+    state = stateUpdate;
+  }
+  else if (state == vState::Indeterminate) {
+    state = stateUpdate;
+  }
+  else if (stateUpdate == vState::Insecure) {
+    if (!vStateIsBogus(state)) {
+      state = vState::Insecure;
+    }
+  }
 }

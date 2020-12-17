@@ -35,20 +35,22 @@
 #include <deque>
 #include <boost/algorithm/string.hpp>
 #include <system_error>
+#include <cinttypes>
 
 static string g_INstr("IN");
 
-ZoneParserTNG::ZoneParserTNG(const string& fname, const DNSName& zname, const string& reldir) : d_reldir(reldir), 
-                                                                                               d_zonename(zname), d_defaultttl(3600), 
-                                                                                               d_templatecounter(0), d_templatestop(0),
-                                                                                               d_templatestep(0), d_havedollarttl(false){
+ZoneParserTNG::ZoneParserTNG(const string& fname, const DNSName& zname, const string& reldir, bool upgradeContent):
+  d_reldir(reldir), d_zonename(zname), d_defaultttl(3600), 
+  d_templatecounter(0), d_templatestop(0), d_templatestep(0),
+  d_havedollarttl(false), d_fromfile(true), d_upgradeContent(upgradeContent)
+{
   stackFile(fname);
 }
 
-ZoneParserTNG::ZoneParserTNG(const vector<string> zonedata, const DNSName& zname):
+ZoneParserTNG::ZoneParserTNG(const vector<string> zonedata, const DNSName& zname, bool upgradeContent):
   d_zonename(zname), d_zonedata(zonedata), d_defaultttl(3600),
   d_templatecounter(0), d_templatestop(0), d_templatestep(0),
-  d_havedollarttl(false), d_fromfile(false)
+  d_havedollarttl(false), d_fromfile(false), d_upgradeContent(upgradeContent)
 {
   d_zonedataline = d_zonedata.begin();
 }
@@ -148,9 +150,9 @@ bool ZoneParserTNG::getTemplateLine()
     string part=makeString(d_templateline, *iter);
     
     /* a part can contain a 'naked' $, an escaped $ (\$), or ${offset,width,radix}, with width defaulting to 0, 
-       and radix being 'd', 'o', 'x' or 'X', defaulting to 'd'. 
+       and radix being 'd', 'o', 'x' or 'X', defaulting to 'd' (so ${offset} is valid).
 
-       The width is zero-padded, so if the counter is at 1, the offset is 15, with is 3, and the radix is 'x',
+       The width is zero-padded, so if the counter is at 1, the offset is 15, width is 3, and the radix is 'x',
        output will be '010', from the input of ${15,3,x}
     */
 
@@ -191,7 +193,11 @@ bool ZoneParserTNG::getTemplateLine()
         string spec(part.c_str() + startPos, part.c_str() + pos);
         int offset=0, width=0;
         char radix='d';
-        sscanf(spec.c_str(), "%d,%d,%c", &offset, &width, &radix);  // parse format specifier
+        // parse format specifier
+        int extracted = sscanf(spec.c_str(), "%d,%d,%c", &offset, &width, &radix);
+        if (extracted < 1) {
+          throw PDNSException("Unable to parse offset, width and radix for $GENERATE's lhs from '"+spec+"' "+getLineOfFile());
+        }
 
         char tmp[80];
         switch (radix) {
@@ -222,7 +228,7 @@ bool ZoneParserTNG::getTemplateLine()
   return true;
 }
 
-void chopComment(string& line)
+static void chopComment(string& line)
 {
   if(line.find(';')==string::npos)
     return;
@@ -240,7 +246,7 @@ void chopComment(string& line)
     line.resize(pos);
 }
 
-bool findAndElide(string& line, char c)
+static bool findAndElide(string& line, char c)
 {
   string::size_type pos, len = line.length();
   bool inQuote=false;
@@ -289,7 +295,7 @@ bool ZoneParserTNG::get(DNSResourceRecord& rr, std::string* comment)
   if(!getTemplateLine() && !getLine())
     return false;
 
-  boost::trim_right_if(d_line, is_any_of(" \t\r\n\x1a"));
+  boost::trim_right_if(d_line, boost::is_any_of(" \t\r\n\x1a"));
   if(comment)
     comment->clear();
   if(comment && d_line.find(';') != string::npos)
@@ -307,7 +313,7 @@ bool ZoneParserTNG::get(DNSResourceRecord& rr, std::string* comment)
   if(d_line[0]=='$') { 
     string command=makeString(d_line, d_parts[0]);
     if(pdns_iequals(command,"$TTL") && d_parts.size() > 1) {
-      d_defaultttl=makeTTLFromZone(trim_right_copy_if(makeString(d_line, d_parts[1]), is_any_of(";")));
+      d_defaultttl=makeTTLFromZone(trim_right_copy_if(makeString(d_line, d_parts[1]), boost::is_any_of(";")));
       d_havedollarttl=true;
     }
     else if(pdns_iequals(command,"$INCLUDE") && d_parts.size() > 1 && d_fromfile) {
@@ -324,10 +330,19 @@ bool ZoneParserTNG::get(DNSResourceRecord& rr, std::string* comment)
         throw exception("$GENERATE is not allowed in this zone");
       }
       // $GENERATE 1-127 $ CNAME $.0
+      // The range part can be one of two forms: start-stop or start-stop/step. If the first
+      // form is used, then step is set to 1. start, stop and step must be positive
+      // integers between 0 and (2^31)-1. start must not be larger than stop.
       string range=makeString(d_line, d_parts[1]);
       d_templatestep=1;
       d_templatestop=0;
-      sscanf(range.c_str(),"%u-%u/%u", &d_templatecounter, &d_templatestop, &d_templatestep);
+      int extracted = sscanf(range.c_str(),"%" SCNu32 "-%" SCNu32 "/%" SCNu32, &d_templatecounter, &d_templatestop, &d_templatestep);
+      if (extracted == 2) {
+        d_templatestep=1;
+      }
+      else if (extracted != 3) {
+        throw exception("Invalid range from $GENERATE parameters '" + range + "'");
+      }
       if (d_templatestep < 1 ||
           d_templatestop < d_templatecounter) {
         throw exception("Invalid $GENERATE parameters");
@@ -373,7 +388,8 @@ bool ZoneParserTNG::get(DNSResourceRecord& rr, std::string* comment)
   string nextpart;
   
   rr.ttl=d_defaultttl;
-  bool haveTTL=0, haveQTYPE=0;
+  bool haveTTL{false}, haveQTYPE{false};
+  string qtypeString;
   pair<string::size_type, string::size_type> range;
 
   while(!d_parts.empty()) {
@@ -405,9 +421,10 @@ bool ZoneParserTNG::get(DNSResourceRecord& rr, std::string* comment)
       break;
 
     try {
-      rr.qtype=DNSRecordContent::TypeToNumber(nextpart);
+      rr.qtype = DNSRecordContent::TypeToNumber(nextpart);
       // cout<<"Got qtype ("<<rr.qtype.getCode()<<")\n";
-      haveQTYPE=1;
+      qtypeString = nextpart;
+      haveQTYPE = true;
       continue;
     }
     catch(...) {
@@ -422,7 +439,7 @@ bool ZoneParserTNG::get(DNSResourceRecord& rr, std::string* comment)
   //  rr.content=d_line.substr(range.first);
   rr.content.assign(d_line, range.first, string::npos);
   chopComment(rr.content);
-  trim_if(rr.content, is_any_of(" \r\n\t\x1a"));
+  trim_if(rr.content, boost::is_any_of(" \r\n\t\x1a"));
 
   if(rr.content.size()==1 && rr.content[0]=='@')
     rr.content=d_zonename.toString();
@@ -430,9 +447,9 @@ bool ZoneParserTNG::get(DNSResourceRecord& rr, std::string* comment)
   if(findAndElide(rr.content, '(')) {      // have found a ( and elided it
     if(!findAndElide(rr.content, ')')) {
       while(getLine()) {
-        trim_right(d_line);
+        boost::trim_right(d_line);
         chopComment(d_line);
-        trim(d_line);
+        boost::trim(d_line);
         
         bool ended = findAndElide(d_line, ')');
         rr.content+=" "+d_line;
@@ -441,7 +458,11 @@ bool ZoneParserTNG::get(DNSResourceRecord& rr, std::string* comment)
       }
     }
   }
-  trim_if(rr.content, is_any_of(" \r\n\t\x1a"));
+  boost::trim_if(rr.content, boost::is_any_of(" \r\n\t\x1a"));
+
+  if (d_upgradeContent && DNSRecordContent::isUnknownType(qtypeString)) {
+    rr.content = DNSRecordContent::upgradeContent(rr.qname, rr.qtype, rr.content);
+  }
 
   vector<string> recparts;
   switch(rr.qtype.getCode()) {

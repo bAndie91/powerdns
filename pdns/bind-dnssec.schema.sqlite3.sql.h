@@ -1,3 +1,4 @@
+#pragma once
 static char sqlCreate[] __attribute__((unused))=
 "create table domainmetadata ("
 " id         INTEGER PRIMARY KEY,"

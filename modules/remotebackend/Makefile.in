@@ -112,21 +112,15 @@ EXTRA_PROGRAMS = remotebackend_pipe.test$(EXEEXT) \
 @PKCS11_TRUE@am__append_5 = \
 @PKCS11_TRUE@	$(P11KIT1_CFLAGS)
 
-@GSS_TSIG_TRUE@am__append_6 = \
-@GSS_TSIG_TRUE@	$(GSS_LIBS)
-
-@GSS_TSIG_TRUE@am__append_7 = \
-@GSS_TSIG_TRUE@	$(GSS_CFLAGS)
-
 subdir = modules/remotebackend
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_pthread_set_name.m4 \
 	$(top_srcdir)/m4/ax_arg_default_enable_disable.m4 \
 	$(top_srcdir)/m4/ax_cxx_compile_stdcxx_11.m4 \
-	$(top_srcdir)/m4/boost.m4 $(top_srcdir)/m4/libcurl.m4 \
-	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
-	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/m4/ax_python_module.m4 $(top_srcdir)/m4/boost.m4 \
+	$(top_srcdir)/m4/libcurl.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
 	$(top_srcdir)/m4/pdns_check_bison.m4 \
 	$(top_srcdir)/m4/pdns_check_cdb.m4 \
 	$(top_srcdir)/m4/pdns_check_clock_gettime.m4 \
@@ -141,14 +135,13 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_pthread_set_name.m4 \
 	$(top_srcdir)/m4/pdns_check_lua_hpp.m4 \
 	$(top_srcdir)/m4/pdns_check_network_libs.m4 \
 	$(top_srcdir)/m4/pdns_check_os.m4 \
+	$(top_srcdir)/m4/pdns_check_python_venv.m4 \
 	$(top_srcdir)/m4/pdns_check_ragel.m4 \
 	$(top_srcdir)/m4/pdns_check_sqlite3.m4 \
-	$(top_srcdir)/m4/pdns_check_virtualenv.m4 \
 	$(top_srcdir)/m4/pdns_d_fortify_source.m4 \
 	$(top_srcdir)/m4/pdns_enable_backend_unit_tests.m4 \
 	$(top_srcdir)/m4/pdns_enable_coverage.m4 \
 	$(top_srcdir)/m4/pdns_enable_fuzz_targets.m4 \
-	$(top_srcdir)/m4/pdns_enable_gss_tsig.m4 \
 	$(top_srcdir)/m4/pdns_enable_ixfrdist.m4 \
 	$(top_srcdir)/m4/pdns_enable_kiss.m4 \
 	$(top_srcdir)/m4/pdns_enable_malloc_trace.m4 \
@@ -216,8 +209,8 @@ am__DEPENDENCIES_1 =
 @REMOTEBACKEND_ZEROMQ_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
 libremotebackend_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(JSON11_LIBS) $(am__DEPENDENCIES_2)
-am_libremotebackend_la_OBJECTS = remotebackend.lo unixconnector.lo \
-	httpconnector.lo pipeconnector.lo zmqconnector.lo
+am_libremotebackend_la_OBJECTS = httpconnector.lo pipeconnector.lo \
+	remotebackend.lo unixconnector.lo zmqconnector.lo
 libremotebackend_la_OBJECTS = $(am_libremotebackend_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -228,36 +221,34 @@ libremotebackend_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
 	$(AM_CXXFLAGS) $(CXXFLAGS) $(libremotebackend_la_LDFLAGS) \
 	$(LDFLAGS) -o $@
 @PKCS11_TRUE@am__DEPENDENCIES_3 = $(am__DEPENDENCIES_1)
-@GSS_TSIG_TRUE@am__DEPENDENCIES_4 = $(am__DEPENDENCIES_1)
 libtestremotebackend_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) $(JSON11_LIBS) \
-	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3) \
-	$(am__DEPENDENCIES_4)
+	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3)
 am__libtestremotebackend_la_SOURCES_DIST = ../../pdns/arguments.hh \
 	../../pdns/arguments.cc ../../pdns/auth-packetcache.cc \
 	../../pdns/auth-packetcache.hh ../../pdns/auth-querycache.cc \
 	../../pdns/auth-querycache.hh ../../pdns/base32.cc \
-	../../pdns/base64.cc ../../pdns/dnsbackend.hh \
+	../../pdns/base64.cc ../../pdns/dns.hh ../../pdns/dns.cc \
+	../../pdns/dns_random_urandom.cc ../../pdns/dnsbackend.hh \
 	../../pdns/dnsbackend.cc ../../pdns/dnslabeltext.cc \
 	../../pdns/dnsname.cc ../../pdns/dnsname.hh \
 	../../pdns/dnspacket.cc ../../pdns/dnsparser.cc \
 	../../pdns/dnsrecords.cc ../../pdns/dnssecinfra.cc \
-	../../pdns/ednssubnet.cc ../../pdns/ednsoptions.cc \
-	../../pdns/ednsoptions.hh ../../pdns/iputils.cc \
+	../../pdns/dnswriter.cc ../../pdns/ednsoptions.cc \
+	../../pdns/ednsoptions.hh ../../pdns/ednssubnet.cc \
+	../../pdns/iputils.cc ../../pdns/json.hh ../../pdns/json.cc \
 	../../pdns/logger.cc ../../pdns/misc.cc \
-	../../pdns/nsecrecords.cc ../../pdns/packetcache.hh \
-	../../pdns/qtype.cc ../../pdns/sillyrecords.cc \
-	../../pdns/statbag.cc ../../pdns/ueberbackend.hh \
-	../../pdns/ueberbackend.cc ../../pdns/dns.hh ../../pdns/dns.cc \
-	../../pdns/dns_random_urandom.cc ../../pdns/dnswriter.cc \
-	../../pdns/nameserver.cc ../../pdns/rcpgenerator.cc \
-	../../pdns/unix_utility.cc ../../pdns/gss_context.cc \
-	../../pdns/gss_context.hh ../../pdns/json.hh \
-	../../pdns/json.cc httpconnector.cc pipeconnector.cc \
-	unixconnector.cc zmqconnector.cc remotebackend.hh \
-	remotebackend.cc ../../pdns/pkcs11signers.hh \
-	../../pdns/pkcs11signers.cc
+	../../pdns/nameserver.cc ../../pdns/nsecrecords.cc \
+	../../pdns/packetcache.hh ../../pdns/qtype.cc \
+	../../pdns/rcpgenerator.cc ../../pdns/shuffle.hh \
+	../../pdns/shuffle.cc ../../pdns/sillyrecords.cc \
+	../../pdns/statbag.cc ../../pdns/svc-records.cc \
+	../../pdns/svc-records.hh ../../pdns/ueberbackend.hh \
+	../../pdns/ueberbackend.cc ../../pdns/unix_utility.cc \
+	httpconnector.cc pipeconnector.cc remotebackend.hh \
+	remotebackend.cc unixconnector.cc zmqconnector.cc \
+	../../pdns/pkcs11signers.hh ../../pdns/pkcs11signers.cc
 am__dirstamp = $(am__leading_dot)dirstamp
 @PKCS11_TRUE@am__objects_1 = ../../pdns/libtestremotebackend_la-pkcs11signers.lo
 am_libtestremotebackend_la_OBJECTS =  \
@@ -266,6 +257,8 @@ am_libtestremotebackend_la_OBJECTS =  \
 	../../pdns/libtestremotebackend_la-auth-querycache.lo \
 	../../pdns/libtestremotebackend_la-base32.lo \
 	../../pdns/libtestremotebackend_la-base64.lo \
+	../../pdns/libtestremotebackend_la-dns.lo \
+	../../pdns/libtestremotebackend_la-dns_random_urandom.lo \
 	../../pdns/libtestremotebackend_la-dnsbackend.lo \
 	../../pdns/libtestremotebackend_la-dnslabeltext.lo \
 	../../pdns/libtestremotebackend_la-dnsname.lo \
@@ -273,62 +266,62 @@ am_libtestremotebackend_la_OBJECTS =  \
 	../../pdns/libtestremotebackend_la-dnsparser.lo \
 	../../pdns/libtestremotebackend_la-dnsrecords.lo \
 	../../pdns/libtestremotebackend_la-dnssecinfra.lo \
-	../../pdns/libtestremotebackend_la-ednssubnet.lo \
+	../../pdns/libtestremotebackend_la-dnswriter.lo \
 	../../pdns/libtestremotebackend_la-ednsoptions.lo \
+	../../pdns/libtestremotebackend_la-ednssubnet.lo \
 	../../pdns/libtestremotebackend_la-iputils.lo \
+	../../pdns/libtestremotebackend_la-json.lo \
 	../../pdns/libtestremotebackend_la-logger.lo \
 	../../pdns/libtestremotebackend_la-misc.lo \
+	../../pdns/libtestremotebackend_la-nameserver.lo \
 	../../pdns/libtestremotebackend_la-nsecrecords.lo \
 	../../pdns/libtestremotebackend_la-qtype.lo \
+	../../pdns/libtestremotebackend_la-rcpgenerator.lo \
+	../../pdns/libtestremotebackend_la-shuffle.lo \
 	../../pdns/libtestremotebackend_la-sillyrecords.lo \
 	../../pdns/libtestremotebackend_la-statbag.lo \
+	../../pdns/libtestremotebackend_la-svc-records.lo \
 	../../pdns/libtestremotebackend_la-ueberbackend.lo \
-	../../pdns/libtestremotebackend_la-dns.lo \
-	../../pdns/libtestremotebackend_la-dns_random_urandom.lo \
-	../../pdns/libtestremotebackend_la-dnswriter.lo \
-	../../pdns/libtestremotebackend_la-nameserver.lo \
-	../../pdns/libtestremotebackend_la-rcpgenerator.lo \
 	../../pdns/libtestremotebackend_la-unix_utility.lo \
-	../../pdns/libtestremotebackend_la-gss_context.lo \
-	../../pdns/libtestremotebackend_la-json.lo \
 	libtestremotebackend_la-httpconnector.lo \
 	libtestremotebackend_la-pipeconnector.lo \
+	libtestremotebackend_la-remotebackend.lo \
 	libtestremotebackend_la-unixconnector.lo \
-	libtestremotebackend_la-zmqconnector.lo \
-	libtestremotebackend_la-remotebackend.lo $(am__objects_1)
+	libtestremotebackend_la-zmqconnector.lo $(am__objects_1)
 libtestremotebackend_la_OBJECTS =  \
 	$(am_libtestremotebackend_la_OBJECTS)
 libtestremotebackend_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
 	$(AM_CXXFLAGS) $(CXXFLAGS) $(libtestremotebackend_la_LDFLAGS) \
 	$(LDFLAGS) -o $@
-am_remotebackend_http_test_OBJECTS = test-remotebackend.$(OBJEXT) \
-	test-remotebackend-http.$(OBJEXT)
+am_remotebackend_http_test_OBJECTS =  \
+	test-remotebackend-http.$(OBJEXT) test-remotebackend.$(OBJEXT)
 remotebackend_http_test_OBJECTS =  \
 	$(am_remotebackend_http_test_OBJECTS)
 remotebackend_http_test_DEPENDENCIES = libtestremotebackend.la
-am_remotebackend_json_test_OBJECTS = test-remotebackend.$(OBJEXT) \
-	test-remotebackend-json.$(OBJEXT)
+am_remotebackend_json_test_OBJECTS =  \
+	test-remotebackend-json.$(OBJEXT) test-remotebackend.$(OBJEXT)
 remotebackend_json_test_OBJECTS =  \
 	$(am_remotebackend_json_test_OBJECTS)
 remotebackend_json_test_DEPENDENCIES = libtestremotebackend.la
-am_remotebackend_pipe_test_OBJECTS = test-remotebackend.$(OBJEXT) \
-	test-remotebackend-pipe.$(OBJEXT)
+am_remotebackend_pipe_test_OBJECTS =  \
+	test-remotebackend-pipe.$(OBJEXT) test-remotebackend.$(OBJEXT)
 remotebackend_pipe_test_OBJECTS =  \
 	$(am_remotebackend_pipe_test_OBJECTS)
 remotebackend_pipe_test_DEPENDENCIES = libtestremotebackend.la
-am_remotebackend_post_test_OBJECTS = test-remotebackend.$(OBJEXT) \
-	test-remotebackend-post.$(OBJEXT)
+am_remotebackend_post_test_OBJECTS =  \
+	test-remotebackend-post.$(OBJEXT) test-remotebackend.$(OBJEXT)
 remotebackend_post_test_OBJECTS =  \
 	$(am_remotebackend_post_test_OBJECTS)
 remotebackend_post_test_DEPENDENCIES = libtestremotebackend.la
-am_remotebackend_unix_test_OBJECTS = test-remotebackend.$(OBJEXT) \
-	test-remotebackend-unix.$(OBJEXT)
+am_remotebackend_unix_test_OBJECTS =  \
+	test-remotebackend-unix.$(OBJEXT) test-remotebackend.$(OBJEXT)
 remotebackend_unix_test_OBJECTS =  \
 	$(am_remotebackend_unix_test_OBJECTS)
 remotebackend_unix_test_DEPENDENCIES = libtestremotebackend.la
-am_remotebackend_zeromq_test_OBJECTS = test-remotebackend.$(OBJEXT) \
-	test-remotebackend-zeromq.$(OBJEXT)
+am_remotebackend_zeromq_test_OBJECTS =  \
+	test-remotebackend-zeromq.$(OBJEXT) \
+	test-remotebackend.$(OBJEXT)
 remotebackend_zeromq_test_OBJECTS =  \
 	$(am_remotebackend_zeromq_test_OBJECTS)
 remotebackend_zeromq_test_DEPENDENCIES = libtestremotebackend.la
@@ -365,7 +358,6 @@ am__depfiles_remade =  \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-ednsoptions.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Plo \
-	../../pdns/$(DEPDIR)/libtestremotebackend_la-gss_context.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-iputils.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-logger.Plo \
@@ -375,8 +367,10 @@ am__depfiles_remade =  \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-pkcs11signers.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-qtype.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Plo \
+	../../pdns/$(DEPDIR)/libtestremotebackend_la-shuffle.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-sillyrecords.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-statbag.Plo \
+	../../pdns/$(DEPDIR)/libtestremotebackend_la-svc-records.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Plo \
 	./$(DEPDIR)/httpconnector.Plo \
@@ -698,9 +692,6 @@ FGREP = @FGREP@
 GEOIP_CFLAGS = @GEOIP_CFLAGS@
 GEOIP_LIBS = @GEOIP_LIBS@
 GREP = @GREP@
-GSS_CFLAGS = @GSS_CFLAGS@
-GSS_LIBS = @GSS_LIBS@
-GSS_TSIG = @GSS_TSIG@
 HAVE_CXX11 = @HAVE_CXX11@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -775,6 +766,11 @@ PROGRAM_LDFLAGS = @PROGRAM_LDFLAGS@
 PROTOBUF_CFLAGS = @PROTOBUF_CFLAGS@
 PROTOBUF_LIBS = @PROTOBUF_LIBS@
 PROTOC = @PROTOC@
+PYTHON = @PYTHON@
+PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
+PYTHON_PLATFORM = @PYTHON_PLATFORM@
+PYTHON_PREFIX = @PYTHON_PREFIX@
+PYTHON_VERSION = @PYTHON_VERSION@
 RAGEL = @RAGEL@
 RANLIB = @RANLIB@
 RELRO_LDFLAGS = @RELRO_LDFLAGS@
@@ -797,7 +793,6 @@ UNIXODBC_CFLAGS = @UNIXODBC_CFLAGS@
 UNIXODBC_LIBS = @UNIXODBC_LIBS@
 UNIXODBC_config = @UNIXODBC_config@
 VERSION = @VERSION@
-VIRTUALENV = @VIRTUALENV@
 WARN_CFLAGS = @WARN_CFLAGS@
 YACC = @YACC@
 YAHTTP_CFLAGS = @YAHTTP_CFLAGS@
@@ -852,9 +847,13 @@ moduleobjects = @moduleobjects@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 pdns_configure_args = @pdns_configure_args@
+pkgpyexecdir = @pkgpyexecdir@
+pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+pyexecdir = @pyexecdir@
+pythondir = @pythondir@
 runstatedir = @runstatedir@
 sbindir = @sbindir@
 service_group = @service_group@
@@ -886,11 +885,11 @@ EXTRA_DIST = \
 EXTRA_LTLIBRARIES = libtestremotebackend.la
 pkglib_LTLIBRARIES = libremotebackend.la
 libremotebackend_la_SOURCES = \
-	remotebackend.hh \
-	remotebackend.cc \
-	unixconnector.cc \
 	httpconnector.cc \
 	pipeconnector.cc \
+	remotebackend.cc \
+	remotebackend.hh \
+	unixconnector.cc \
 	zmqconnector.cc
 
 libremotebackend_la_LDFLAGS = -module -avoid-version
@@ -916,69 +915,69 @@ libtestremotebackend_la_SOURCES = ../../pdns/arguments.hh \
 	../../pdns/arguments.cc ../../pdns/auth-packetcache.cc \
 	../../pdns/auth-packetcache.hh ../../pdns/auth-querycache.cc \
 	../../pdns/auth-querycache.hh ../../pdns/base32.cc \
-	../../pdns/base64.cc ../../pdns/dnsbackend.hh \
+	../../pdns/base64.cc ../../pdns/dns.hh ../../pdns/dns.cc \
+	../../pdns/dns_random_urandom.cc ../../pdns/dnsbackend.hh \
 	../../pdns/dnsbackend.cc ../../pdns/dnslabeltext.cc \
 	../../pdns/dnsname.cc ../../pdns/dnsname.hh \
 	../../pdns/dnspacket.cc ../../pdns/dnsparser.cc \
 	../../pdns/dnsrecords.cc ../../pdns/dnssecinfra.cc \
-	../../pdns/ednssubnet.cc ../../pdns/ednsoptions.cc \
-	../../pdns/ednsoptions.hh ../../pdns/iputils.cc \
+	../../pdns/dnswriter.cc ../../pdns/ednsoptions.cc \
+	../../pdns/ednsoptions.hh ../../pdns/ednssubnet.cc \
+	../../pdns/iputils.cc ../../pdns/json.hh ../../pdns/json.cc \
 	../../pdns/logger.cc ../../pdns/misc.cc \
-	../../pdns/nsecrecords.cc ../../pdns/packetcache.hh \
-	../../pdns/qtype.cc ../../pdns/sillyrecords.cc \
-	../../pdns/statbag.cc ../../pdns/ueberbackend.hh \
-	../../pdns/ueberbackend.cc ../../pdns/dns.hh ../../pdns/dns.cc \
-	../../pdns/dns_random_urandom.cc ../../pdns/dnswriter.cc \
-	../../pdns/nameserver.cc ../../pdns/rcpgenerator.cc \
-	../../pdns/unix_utility.cc ../../pdns/gss_context.cc \
-	../../pdns/gss_context.hh ../../pdns/json.hh \
-	../../pdns/json.cc httpconnector.cc pipeconnector.cc \
-	unixconnector.cc zmqconnector.cc remotebackend.hh \
-	remotebackend.cc $(am__append_3)
-libtestremotebackend_la_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_5) \
-	$(am__append_7)
+	../../pdns/nameserver.cc ../../pdns/nsecrecords.cc \
+	../../pdns/packetcache.hh ../../pdns/qtype.cc \
+	../../pdns/rcpgenerator.cc ../../pdns/shuffle.hh \
+	../../pdns/shuffle.cc ../../pdns/sillyrecords.cc \
+	../../pdns/statbag.cc ../../pdns/svc-records.cc \
+	../../pdns/svc-records.hh ../../pdns/ueberbackend.hh \
+	../../pdns/ueberbackend.cc ../../pdns/unix_utility.cc \
+	httpconnector.cc pipeconnector.cc remotebackend.hh \
+	remotebackend.cc unixconnector.cc zmqconnector.cc \
+	$(am__append_3)
+libtestremotebackend_la_CPPFLAGS = $(AM_CPPFLAGS) $(am__append_5)
 libtestremotebackend_la_LIBADD = $(YAHTTP_LIBS) $(LIBCRYPTO_LIBS) \
 	$(BOOST_UNIT_TEST_FRAMEWORK_LIBS) \
 	$(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBDL) $(JSON11_LIBS) \
-	$(am__append_2) $(am__append_4) $(am__append_6)
+	$(am__append_2) $(am__append_4)
 libtestremotebackend_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	$(BOOST_UNIT_TEST_FRAMEWORK_LDFLAGS)
 
 remotebackend_http_test_SOURCES = \
-	test-remotebackend.cc \
 	test-remotebackend-http.cc \
-	test-remotebackend-keys.hh
+	test-remotebackend-keys.hh \
+	test-remotebackend.cc
 
 remotebackend_http_test_LDADD = libtestremotebackend.la
 remotebackend_json_test_SOURCES = \
-	test-remotebackend.cc \
 	test-remotebackend-json.cc \
-	test-remotebackend-keys.hh
+	test-remotebackend-keys.hh \
+	test-remotebackend.cc
 
 remotebackend_json_test_LDADD = libtestremotebackend.la
 remotebackend_pipe_test_SOURCES = \
-	test-remotebackend.cc \
+	test-remotebackend-keys.hh \
 	test-remotebackend-pipe.cc \
-	test-remotebackend-keys.hh 
+	test-remotebackend.cc
 
 remotebackend_pipe_test_LDADD = libtestremotebackend.la
 remotebackend_post_test_SOURCES = \
-	test-remotebackend.cc \
+	test-remotebackend-keys.hh \
 	test-remotebackend-post.cc \
-	test-remotebackend-keys.hh
+	test-remotebackend.cc
 
 remotebackend_post_test_LDADD = libtestremotebackend.la
 remotebackend_unix_test_SOURCES = \
-	test-remotebackend.cc \
+	test-remotebackend-keys.hh \
 	test-remotebackend-unix.cc \
-	test-remotebackend-keys.hh
+	test-remotebackend.cc
 
 remotebackend_unix_test_LDADD = libtestremotebackend.la
 remotebackend_zeromq_test_SOURCES = \
-	test-remotebackend.cc \
+	test-remotebackend-keys.hh \
 	test-remotebackend-zeromq.cc \
-	test-remotebackend-keys.hh
+	test-remotebackend.cc
 
 remotebackend_zeromq_test_LDADD = libtestremotebackend.la
 all: $(BUILT_SOURCES)
@@ -1074,6 +1073,11 @@ libremotebackend.la: $(libremotebackend_la_OBJECTS) $(libremotebackend_la_DEPEND
 ../../pdns/libtestremotebackend_la-base64.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-dns.lo: ../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-dns_random_urandom.lo:  \
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-dnsbackend.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
@@ -1095,13 +1099,19 @@ libremotebackend.la: $(libremotebackend_la_OBJECTS) $(libremotebackend_la_DEPEND
 ../../pdns/libtestremotebackend_la-dnssecinfra.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
-../../pdns/libtestremotebackend_la-ednssubnet.lo:  \
+../../pdns/libtestremotebackend_la-dnswriter.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-ednsoptions.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-ednssubnet.lo:  \
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-iputils.lo:  \
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-json.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-logger.lo:  \
@@ -1110,10 +1120,19 @@ libremotebackend.la: $(libremotebackend_la_OBJECTS) $(libremotebackend_la_DEPEND
 ../../pdns/libtestremotebackend_la-misc.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-nameserver.lo:  \
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-nsecrecords.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-qtype.lo:  \
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-rcpgenerator.lo:  \
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-shuffle.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-sillyrecords.lo:  \
@@ -1122,30 +1141,13 @@ libremotebackend.la: $(libremotebackend_la_OBJECTS) $(libremotebackend_la_DEPEND
 ../../pdns/libtestremotebackend_la-statbag.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-svc-records.lo:  \
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-ueberbackend.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
-../../pdns/libtestremotebackend_la-dns.lo: ../../pdns/$(am__dirstamp) \
-	../../pdns/$(DEPDIR)/$(am__dirstamp)
-../../pdns/libtestremotebackend_la-dns_random_urandom.lo:  \
-	../../pdns/$(am__dirstamp) \
-	../../pdns/$(DEPDIR)/$(am__dirstamp)
-../../pdns/libtestremotebackend_la-dnswriter.lo:  \
-	../../pdns/$(am__dirstamp) \
-	../../pdns/$(DEPDIR)/$(am__dirstamp)
-../../pdns/libtestremotebackend_la-nameserver.lo:  \
-	../../pdns/$(am__dirstamp) \
-	../../pdns/$(DEPDIR)/$(am__dirstamp)
-../../pdns/libtestremotebackend_la-rcpgenerator.lo:  \
-	../../pdns/$(am__dirstamp) \
-	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-unix_utility.lo:  \
-	../../pdns/$(am__dirstamp) \
-	../../pdns/$(DEPDIR)/$(am__dirstamp)
-../../pdns/libtestremotebackend_la-gss_context.lo:  \
-	../../pdns/$(am__dirstamp) \
-	../../pdns/$(DEPDIR)/$(am__dirstamp)
-../../pdns/libtestremotebackend_la-json.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-pkcs11signers.lo:  \
@@ -1204,7 +1206,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-ednsoptions.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-gss_context.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-iputils.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-logger.Plo@am__quote@ # am--include-marker
@@ -1214,8 +1215,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-pkcs11signers.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-qtype.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-shuffle.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-sillyrecords.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-statbag.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-svc-records.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/httpconnector.Plo@am__quote@ # am--include-marker
@@ -1301,6 +1304,20 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-base64.lo `test -f '../../pdns/base64.cc' || echo '$(srcdir)/'`../../pdns/base64.cc
 
+../../pdns/libtestremotebackend_la-dns.lo: ../../pdns/dns.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dns.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Tpo -c -o ../../pdns/libtestremotebackend_la-dns.lo `test -f '../../pdns/dns.cc' || echo '$(srcdir)/'`../../pdns/dns.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dns.cc' object='../../pdns/libtestremotebackend_la-dns.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dns.lo `test -f '../../pdns/dns.cc' || echo '$(srcdir)/'`../../pdns/dns.cc
+
+../../pdns/libtestremotebackend_la-dns_random_urandom.lo: ../../pdns/dns_random_urandom.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dns_random_urandom.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random_urandom.Tpo -c -o ../../pdns/libtestremotebackend_la-dns_random_urandom.lo `test -f '../../pdns/dns_random_urandom.cc' || echo '$(srcdir)/'`../../pdns/dns_random_urandom.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random_urandom.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random_urandom.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dns_random_urandom.cc' object='../../pdns/libtestremotebackend_la-dns_random_urandom.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dns_random_urandom.lo `test -f '../../pdns/dns_random_urandom.cc' || echo '$(srcdir)/'`../../pdns/dns_random_urandom.cc
+
 ../../pdns/libtestremotebackend_la-dnsbackend.lo: ../../pdns/dnsbackend.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnsbackend.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsbackend.Tpo -c -o ../../pdns/libtestremotebackend_la-dnsbackend.lo `test -f '../../pdns/dnsbackend.cc' || echo '$(srcdir)/'`../../pdns/dnsbackend.cc
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsbackend.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnsbackend.Plo
@@ -1350,12 +1367,12 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnssecinfra.lo `test -f '../../pdns/dnssecinfra.cc' || echo '$(srcdir)/'`../../pdns/dnssecinfra.cc
 
-../../pdns/libtestremotebackend_la-ednssubnet.lo: ../../pdns/ednssubnet.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-ednssubnet.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Tpo -c -o ../../pdns/libtestremotebackend_la-ednssubnet.lo `test -f '../../pdns/ednssubnet.cc' || echo '$(srcdir)/'`../../pdns/ednssubnet.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/ednssubnet.cc' object='../../pdns/libtestremotebackend_la-ednssubnet.lo' libtool=yes @AMDEPBACKSLASH@
+../../pdns/libtestremotebackend_la-dnswriter.lo: ../../pdns/dnswriter.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnswriter.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Tpo -c -o ../../pdns/libtestremotebackend_la-dnswriter.lo `test -f '../../pdns/dnswriter.cc' || echo '$(srcdir)/'`../../pdns/dnswriter.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dnswriter.cc' object='../../pdns/libtestremotebackend_la-dnswriter.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-ednssubnet.lo `test -f '../../pdns/ednssubnet.cc' || echo '$(srcdir)/'`../../pdns/ednssubnet.cc
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnswriter.lo `test -f '../../pdns/dnswriter.cc' || echo '$(srcdir)/'`../../pdns/dnswriter.cc
 
 ../../pdns/libtestremotebackend_la-ednsoptions.lo: ../../pdns/ednsoptions.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-ednsoptions.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednsoptions.Tpo -c -o ../../pdns/libtestremotebackend_la-ednsoptions.lo `test -f '../../pdns/ednsoptions.cc' || echo '$(srcdir)/'`../../pdns/ednsoptions.cc
@@ -1364,12 +1381,26 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-ednsoptions.lo `test -f '../../pdns/ednsoptions.cc' || echo '$(srcdir)/'`../../pdns/ednsoptions.cc
 
+../../pdns/libtestremotebackend_la-ednssubnet.lo: ../../pdns/ednssubnet.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-ednssubnet.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Tpo -c -o ../../pdns/libtestremotebackend_la-ednssubnet.lo `test -f '../../pdns/ednssubnet.cc' || echo '$(srcdir)/'`../../pdns/ednssubnet.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/ednssubnet.cc' object='../../pdns/libtestremotebackend_la-ednssubnet.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-ednssubnet.lo `test -f '../../pdns/ednssubnet.cc' || echo '$(srcdir)/'`../../pdns/ednssubnet.cc
+
 ../../pdns/libtestremotebackend_la-iputils.lo: ../../pdns/iputils.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-iputils.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-iputils.Tpo -c -o ../../pdns/libtestremotebackend_la-iputils.lo `test -f '../../pdns/iputils.cc' || echo '$(srcdir)/'`../../pdns/iputils.cc
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-iputils.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-iputils.Plo
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/iputils.cc' object='../../pdns/libtestremotebackend_la-iputils.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-iputils.lo `test -f '../../pdns/iputils.cc' || echo '$(srcdir)/'`../../pdns/iputils.cc
+
+../../pdns/libtestremotebackend_la-json.lo: ../../pdns/json.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-json.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Tpo -c -o ../../pdns/libtestremotebackend_la-json.lo `test -f '../../pdns/json.cc' || echo '$(srcdir)/'`../../pdns/json.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/json.cc' object='../../pdns/libtestremotebackend_la-json.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-json.lo `test -f '../../pdns/json.cc' || echo '$(srcdir)/'`../../pdns/json.cc
 
 ../../pdns/libtestremotebackend_la-logger.lo: ../../pdns/logger.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-logger.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-logger.Tpo -c -o ../../pdns/libtestremotebackend_la-logger.lo `test -f '../../pdns/logger.cc' || echo '$(srcdir)/'`../../pdns/logger.cc
@@ -1385,6 +1416,13 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-misc.lo `test -f '../../pdns/misc.cc' || echo '$(srcdir)/'`../../pdns/misc.cc
 
+../../pdns/libtestremotebackend_la-nameserver.lo: ../../pdns/nameserver.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-nameserver.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Tpo -c -o ../../pdns/libtestremotebackend_la-nameserver.lo `test -f '../../pdns/nameserver.cc' || echo '$(srcdir)/'`../../pdns/nameserver.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/nameserver.cc' object='../../pdns/libtestremotebackend_la-nameserver.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-nameserver.lo `test -f '../../pdns/nameserver.cc' || echo '$(srcdir)/'`../../pdns/nameserver.cc
+
 ../../pdns/libtestremotebackend_la-nsecrecords.lo: ../../pdns/nsecrecords.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-nsecrecords.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-nsecrecords.Tpo -c -o ../../pdns/libtestremotebackend_la-nsecrecords.lo `test -f '../../pdns/nsecrecords.cc' || echo '$(srcdir)/'`../../pdns/nsecrecords.cc
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-nsecrecords.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-nsecrecords.Plo
@@ -1398,6 +1436,20 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/qtype.cc' object='../../pdns/libtestremotebackend_la-qtype.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-qtype.lo `test -f '../../pdns/qtype.cc' || echo '$(srcdir)/'`../../pdns/qtype.cc
+
+../../pdns/libtestremotebackend_la-rcpgenerator.lo: ../../pdns/rcpgenerator.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-rcpgenerator.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Tpo -c -o ../../pdns/libtestremotebackend_la-rcpgenerator.lo `test -f '../../pdns/rcpgenerator.cc' || echo '$(srcdir)/'`../../pdns/rcpgenerator.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/rcpgenerator.cc' object='../../pdns/libtestremotebackend_la-rcpgenerator.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-rcpgenerator.lo `test -f '../../pdns/rcpgenerator.cc' || echo '$(srcdir)/'`../../pdns/rcpgenerator.cc
+
+../../pdns/libtestremotebackend_la-shuffle.lo: ../../pdns/shuffle.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-shuffle.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-shuffle.Tpo -c -o ../../pdns/libtestremotebackend_la-shuffle.lo `test -f '../../pdns/shuffle.cc' || echo '$(srcdir)/'`../../pdns/shuffle.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-shuffle.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-shuffle.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/shuffle.cc' object='../../pdns/libtestremotebackend_la-shuffle.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-shuffle.lo `test -f '../../pdns/shuffle.cc' || echo '$(srcdir)/'`../../pdns/shuffle.cc
 
 ../../pdns/libtestremotebackend_la-sillyrecords.lo: ../../pdns/sillyrecords.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-sillyrecords.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-sillyrecords.Tpo -c -o ../../pdns/libtestremotebackend_la-sillyrecords.lo `test -f '../../pdns/sillyrecords.cc' || echo '$(srcdir)/'`../../pdns/sillyrecords.cc
@@ -1413,6 +1465,13 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-statbag.lo `test -f '../../pdns/statbag.cc' || echo '$(srcdir)/'`../../pdns/statbag.cc
 
+../../pdns/libtestremotebackend_la-svc-records.lo: ../../pdns/svc-records.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-svc-records.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-svc-records.Tpo -c -o ../../pdns/libtestremotebackend_la-svc-records.lo `test -f '../../pdns/svc-records.cc' || echo '$(srcdir)/'`../../pdns/svc-records.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-svc-records.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-svc-records.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/svc-records.cc' object='../../pdns/libtestremotebackend_la-svc-records.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-svc-records.lo `test -f '../../pdns/svc-records.cc' || echo '$(srcdir)/'`../../pdns/svc-records.cc
+
 ../../pdns/libtestremotebackend_la-ueberbackend.lo: ../../pdns/ueberbackend.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-ueberbackend.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Tpo -c -o ../../pdns/libtestremotebackend_la-ueberbackend.lo `test -f '../../pdns/ueberbackend.cc' || echo '$(srcdir)/'`../../pdns/ueberbackend.cc
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Plo
@@ -1420,61 +1479,12 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-ueberbackend.lo `test -f '../../pdns/ueberbackend.cc' || echo '$(srcdir)/'`../../pdns/ueberbackend.cc
 
-../../pdns/libtestremotebackend_la-dns.lo: ../../pdns/dns.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dns.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Tpo -c -o ../../pdns/libtestremotebackend_la-dns.lo `test -f '../../pdns/dns.cc' || echo '$(srcdir)/'`../../pdns/dns.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dns.cc' object='../../pdns/libtestremotebackend_la-dns.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dns.lo `test -f '../../pdns/dns.cc' || echo '$(srcdir)/'`../../pdns/dns.cc
-
-../../pdns/libtestremotebackend_la-dns_random_urandom.lo: ../../pdns/dns_random_urandom.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dns_random_urandom.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random_urandom.Tpo -c -o ../../pdns/libtestremotebackend_la-dns_random_urandom.lo `test -f '../../pdns/dns_random_urandom.cc' || echo '$(srcdir)/'`../../pdns/dns_random_urandom.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random_urandom.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns_random_urandom.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dns_random_urandom.cc' object='../../pdns/libtestremotebackend_la-dns_random_urandom.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dns_random_urandom.lo `test -f '../../pdns/dns_random_urandom.cc' || echo '$(srcdir)/'`../../pdns/dns_random_urandom.cc
-
-../../pdns/libtestremotebackend_la-dnswriter.lo: ../../pdns/dnswriter.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-dnswriter.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Tpo -c -o ../../pdns/libtestremotebackend_la-dnswriter.lo `test -f '../../pdns/dnswriter.cc' || echo '$(srcdir)/'`../../pdns/dnswriter.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/dnswriter.cc' object='../../pdns/libtestremotebackend_la-dnswriter.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-dnswriter.lo `test -f '../../pdns/dnswriter.cc' || echo '$(srcdir)/'`../../pdns/dnswriter.cc
-
-../../pdns/libtestremotebackend_la-nameserver.lo: ../../pdns/nameserver.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-nameserver.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Tpo -c -o ../../pdns/libtestremotebackend_la-nameserver.lo `test -f '../../pdns/nameserver.cc' || echo '$(srcdir)/'`../../pdns/nameserver.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-nameserver.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/nameserver.cc' object='../../pdns/libtestremotebackend_la-nameserver.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-nameserver.lo `test -f '../../pdns/nameserver.cc' || echo '$(srcdir)/'`../../pdns/nameserver.cc
-
-../../pdns/libtestremotebackend_la-rcpgenerator.lo: ../../pdns/rcpgenerator.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-rcpgenerator.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Tpo -c -o ../../pdns/libtestremotebackend_la-rcpgenerator.lo `test -f '../../pdns/rcpgenerator.cc' || echo '$(srcdir)/'`../../pdns/rcpgenerator.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/rcpgenerator.cc' object='../../pdns/libtestremotebackend_la-rcpgenerator.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-rcpgenerator.lo `test -f '../../pdns/rcpgenerator.cc' || echo '$(srcdir)/'`../../pdns/rcpgenerator.cc
-
 ../../pdns/libtestremotebackend_la-unix_utility.lo: ../../pdns/unix_utility.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-unix_utility.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Tpo -c -o ../../pdns/libtestremotebackend_la-unix_utility.lo `test -f '../../pdns/unix_utility.cc' || echo '$(srcdir)/'`../../pdns/unix_utility.cc
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Plo
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/unix_utility.cc' object='../../pdns/libtestremotebackend_la-unix_utility.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-unix_utility.lo `test -f '../../pdns/unix_utility.cc' || echo '$(srcdir)/'`../../pdns/unix_utility.cc
-
-../../pdns/libtestremotebackend_la-gss_context.lo: ../../pdns/gss_context.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-gss_context.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-gss_context.Tpo -c -o ../../pdns/libtestremotebackend_la-gss_context.lo `test -f '../../pdns/gss_context.cc' || echo '$(srcdir)/'`../../pdns/gss_context.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-gss_context.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-gss_context.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/gss_context.cc' object='../../pdns/libtestremotebackend_la-gss_context.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-gss_context.lo `test -f '../../pdns/gss_context.cc' || echo '$(srcdir)/'`../../pdns/gss_context.cc
-
-../../pdns/libtestremotebackend_la-json.lo: ../../pdns/json.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-json.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Tpo -c -o ../../pdns/libtestremotebackend_la-json.lo `test -f '../../pdns/json.cc' || echo '$(srcdir)/'`../../pdns/json.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/json.cc' object='../../pdns/libtestremotebackend_la-json.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-json.lo `test -f '../../pdns/json.cc' || echo '$(srcdir)/'`../../pdns/json.cc
 
 libtestremotebackend_la-httpconnector.lo: httpconnector.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libtestremotebackend_la-httpconnector.lo -MD -MP -MF $(DEPDIR)/libtestremotebackend_la-httpconnector.Tpo -c -o libtestremotebackend_la-httpconnector.lo `test -f 'httpconnector.cc' || echo '$(srcdir)/'`httpconnector.cc
@@ -1490,6 +1500,13 @@ libtestremotebackend_la-pipeconnector.lo: pipeconnector.cc
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-pipeconnector.lo `test -f 'pipeconnector.cc' || echo '$(srcdir)/'`pipeconnector.cc
 
+libtestremotebackend_la-remotebackend.lo: remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libtestremotebackend_la-remotebackend.lo -MD -MP -MF $(DEPDIR)/libtestremotebackend_la-remotebackend.Tpo -c -o libtestremotebackend_la-remotebackend.lo `test -f 'remotebackend.cc' || echo '$(srcdir)/'`remotebackend.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libtestremotebackend_la-remotebackend.Tpo $(DEPDIR)/libtestremotebackend_la-remotebackend.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='remotebackend.cc' object='libtestremotebackend_la-remotebackend.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-remotebackend.lo `test -f 'remotebackend.cc' || echo '$(srcdir)/'`remotebackend.cc
+
 libtestremotebackend_la-unixconnector.lo: unixconnector.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libtestremotebackend_la-unixconnector.lo -MD -MP -MF $(DEPDIR)/libtestremotebackend_la-unixconnector.Tpo -c -o libtestremotebackend_la-unixconnector.lo `test -f 'unixconnector.cc' || echo '$(srcdir)/'`unixconnector.cc
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libtestremotebackend_la-unixconnector.Tpo $(DEPDIR)/libtestremotebackend_la-unixconnector.Plo
@@ -1503,13 +1520,6 @@ libtestremotebackend_la-zmqconnector.lo: zmqconnector.cc
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='zmqconnector.cc' object='libtestremotebackend_la-zmqconnector.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-zmqconnector.lo `test -f 'zmqconnector.cc' || echo '$(srcdir)/'`zmqconnector.cc
-
-libtestremotebackend_la-remotebackend.lo: remotebackend.cc
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT libtestremotebackend_la-remotebackend.lo -MD -MP -MF $(DEPDIR)/libtestremotebackend_la-remotebackend.Tpo -c -o libtestremotebackend_la-remotebackend.lo `test -f 'remotebackend.cc' || echo '$(srcdir)/'`remotebackend.cc
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libtestremotebackend_la-remotebackend.Tpo $(DEPDIR)/libtestremotebackend_la-remotebackend.Plo
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='remotebackend.cc' object='libtestremotebackend_la-remotebackend.lo' libtool=yes @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o libtestremotebackend_la-remotebackend.lo `test -f 'remotebackend.cc' || echo '$(srcdir)/'`remotebackend.cc
 
 ../../pdns/libtestremotebackend_la-pkcs11signers.lo: ../../pdns/pkcs11signers.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-pkcs11signers.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-pkcs11signers.Tpo -c -o ../../pdns/libtestremotebackend_la-pkcs11signers.lo `test -f '../../pdns/pkcs11signers.cc' || echo '$(srcdir)/'`../../pdns/pkcs11signers.cc
@@ -1835,7 +1845,6 @@ distclean: distclean-am
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednsoptions.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Plo
-	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-gss_context.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-iputils.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-logger.Plo
@@ -1845,8 +1854,10 @@ distclean: distclean-am
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-pkcs11signers.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-qtype.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Plo
+	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-shuffle.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-sillyrecords.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-statbag.Plo
+	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-svc-records.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Plo
 	-rm -f ./$(DEPDIR)/httpconnector.Plo
@@ -1928,7 +1939,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-dnswriter.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednsoptions.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-ednssubnet.Plo
-	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-gss_context.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-iputils.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-json.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-logger.Plo
@@ -1938,8 +1948,10 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-pkcs11signers.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-qtype.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-rcpgenerator.Plo
+	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-shuffle.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-sillyrecords.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-statbag.Plo
+	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-svc-records.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-ueberbackend.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-unix_utility.Plo
 	-rm -f ./$(DEPDIR)/httpconnector.Plo

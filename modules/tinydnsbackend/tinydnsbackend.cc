@@ -29,7 +29,7 @@
 
 static string backendname="[TinyDNSBackend] ";
 uint32_t TinyDNSBackend::s_lastId;
-pthread_mutex_t TinyDNSBackend::s_domainInfoLock=PTHREAD_MUTEX_INITIALIZER;
+std::mutex TinyDNSBackend::s_domainInfoLock;
 TinyDNSBackend::TDI_suffix_t TinyDNSBackend::s_domainInfo;
 
 vector<string> TinyDNSBackend::getLocations()
@@ -90,7 +90,7 @@ TinyDNSBackend::TinyDNSBackend(const string &suffix)
 }
 
 void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* retDomains) {
-  Lock l(&s_domainInfoLock); //TODO: We could actually lock less if we do it per suffix.
+  std::lock_guard<std::mutex> l(s_domainInfoLock); //TODO: We could actually lock less if we do it per suffix.
 
   if (! s_domainInfo.count(d_suffix)) {
     TDI_t tmp;
@@ -133,7 +133,7 @@ void TinyDNSBackend::getUpdatedMasters(vector<DomainInfo>* retDomains) {
 }
 
 void TinyDNSBackend::setNotified(uint32_t id, uint32_t serial) {
-  Lock l(&s_domainInfoLock);
+  std::lock_guard<std::mutex> l(s_domainInfoLock);
   if (!s_domainInfo.count(d_suffix)) {
     throw PDNSException("Can't get list of domains to set the serial.");
   }
@@ -163,9 +163,10 @@ void TinyDNSBackend::getAllDomains(vector<DomainInfo> *domains, bool include_dis
 
   d_cdbReader->searchAll();
   DNSResourceRecord rr;
+  std::unordered_set<DNSName> dupcheck;
 
   while (get(rr)) {
-    if (rr.qtype.getCode() == QType::SOA) {
+    if (rr.qtype.getCode() == QType::SOA && dupcheck.insert(rr.qname).second) {
       SOAData sd;
       fillSOAData(rr.content, sd);
 
@@ -348,7 +349,7 @@ class TinyDNSFactory: public BackendFactory
 public:
   TinyDNSFactory() : BackendFactory("tinydns") {}
 
-  void declareArguments(const string &suffix="") {
+  void declareArguments(const string &suffix="") override {
     declare(suffix, "notify-on-startup", "Tell the TinyDNSBackend to notify all the slave nameservers on startup. Default is no.", "no");
     declare(suffix, "dbfile", "Location of the cdb data file", "data.cdb");
     declare(suffix, "tai-adjust", "This adjusts the TAI value if timestamps are used. These seconds will be added to the start point (1970) and will allow you to adjust for leap seconds. The default is 11.", "11");
@@ -356,7 +357,7 @@ public:
     declare(suffix, "ignore-bogus-records", "The data.cdb file might have some incorrect record data, this causes PowerDNS to fail, where tinydns would send out truncated data. This option makes powerdns ignore that data!", "no");
   }
 
-  DNSBackend *make(const string &suffix="") {
+  DNSBackend *make(const string &suffix="") override {
     return new TinyDNSBackend(suffix);
   }
 };

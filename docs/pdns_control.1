@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "PDNS_CONTROL" "1" "Sep 22, 2020" "" "PowerDNS Authoritative Server"
+.TH "PDNS_CONTROL" "1" "Dec 17, 2020" "" "PowerDNS Authoritative Server"
 .SH NAME
 pdns_control \- Control the PowerDNS nameserver
 .
@@ -98,7 +98,7 @@ Restart the nameserver so it reloads its configuration. Only works
 when the server is running in guardian mode.
 .SS list
 .sp
-Dump all variables and their values in a comma separated list,
+Dump all statistics and their values in a comma separated list,
 equivalent to \fBshow *\fP\&.
 .SS list\-zones [master,slave,native]
 .sp
@@ -145,17 +145,23 @@ Get the top number of remote addresses (clients).
 .SS respsizes
 .sp
 Get a histogram of the response sizes.
-.SS retrieve \fIDOMAIN\fP
+.SS retrieve \fIDOMAIN\fP [IP]
 .sp
 Retrieve slave \fIDOMAIN\fP from its master. Done nearly immediately.
+If IP is specified, then retrieval is forced from the specified IP.
+Port may be specified in AFI specific manner.
 .SS set \fIVARIABLE\fP \fIVALUE\fP
 .sp
 Set the configuration parameter \fIVARIABLE\fP to \fIVALUE\fP\&. Currently
 only the query\-logging can be set.
-.SS show \fIVARIABLE\fP
+.SS show \fISTATISTIC\fP
 .sp
 Show a single statistic, as present in the output of the list
 command.
+.SS show \fISTATISTIC\-PREFIX\fP*
+.sp
+Show all statistics which names start with the supplied \fISTATISTIC\-PREFIX\fP,
+as a comma\-separated list. Only one (ending) wildcard is allowed.
 .SS status
 .sp
 Show usage statistics. This only works if the server is running in
@@ -173,7 +179,7 @@ Show the uptime of the running server.
 Print the version of the running pdns daemon.
 .SH SEE ALSO
 .sp
-pdns_server(1)
+pdns_server (1), pdnsutil (1)
 .SH AUTHOR
 PowerDNS.COM BV
 .SH COPYRIGHT

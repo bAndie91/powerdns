@@ -44,7 +44,6 @@
 #ifdef HAVE_P11KIT1
 #include "pkcs11signers.hh"
 #endif
-#include "gss_context.hh"
 #include "misc.hh"
 
 using namespace boost::assign;
@@ -85,7 +84,7 @@ shared_ptr<DNSCryptoKeyEngine> DNSCryptoKeyEngine::makeFromISCString(DNSKEYRecor
 
   while(std::getline(str, sline)) {
     tie(key,value)=splitField(sline, ':');
-    trim(value);
+    boost::trim(value);
     if(pdns_iequals(key,"algorithm")) {
       algorithm = pdns_stou(value);
       stormap["algorithm"]=std::to_string(algorithm);
@@ -134,10 +133,10 @@ shared_ptr<DNSCryptoKeyEngine> DNSCryptoKeyEngine::makeFromISCString(DNSKEYRecor
 
 std::string DNSCryptoKeyEngine::convertToISC() const
 {
-  storvector_t stormap = this->convertToISCVector();
+  storvector_t storvector = this->convertToISCVector();
   ostringstream ret;
   ret<<"Private-key-format: v1.2\n";
-  for(const stormap_t::value_type& value :  stormap) {
+  for(const storvector_t::value_type& value :  storvector) {
     if(value.first != "Algorithm" && value.first != "PIN" && 
        value.first != "Slot" && value.first != "Engine" &&
        value.first != "Label" && value.first != "PubLabel")
@@ -268,7 +267,7 @@ void DNSCryptoKeyEngine::testMakers(unsigned int algo, maker_t* creator, maker_t
 
     while(std::getline(str, sline)) {
       tie(key,value)=splitField(sline, ':');
-      trim(value);
+      boost::trim(value);
       if(pdns_iequals(key,"algorithm")) {
         algorithm = pdns_stou(value);
         stormap["algorithm"]=std::to_string(algorithm);
@@ -541,55 +540,6 @@ DNSKEYRecordContent DNSSECPrivateKey::getDNSKEY() const
   return makeDNSKEYFromDNSCryptoKeyEngine(getKey(), d_algorithm, d_flags);
 }
 
-class DEREater
-{
-public:
-  DEREater(const std::string& str) : d_str(str), d_pos(0)
-  {}
-  
-  struct eof{};
-  
-  uint8_t getByte()
-  {
-    if(d_pos >= d_str.length()) {
-      throw eof();
-    }
-    return (uint8_t) d_str[d_pos++];
-  }
-  
-  uint32_t getLength()
-  {
-    uint8_t first = getByte();
-    if(first < 0x80) {
-      return first;
-    }
-    first &= ~0x80;
-    
-    uint32_t len=0;
-    for(int n=0; n < first; ++n) {
-      len *= 0x100;
-      len += getByte();
-    }
-    return len;
-  }
-  
-  std::string getBytes(unsigned int len)
-  {
-    std::string ret;
-    for(unsigned int n=0; n < len; ++n)
-      ret.append(1, (char)getByte());
-    return ret;
-  }
-  
-  std::string::size_type getOffset() 
-  {
-    return d_pos;
-  }
-private:
-  const std::string& d_str;
-  std::string::size_type d_pos;
-};
-
 static string calculateHMAC(const std::string& key, const std::string& text, TSIGHashEnum hasher) {
 
   const EVP_MD* md_type;
@@ -632,7 +582,7 @@ static bool constantTimeStringEquals(const std::string& a, const std::string& b)
     return false;
   }
   const size_t size = a.size();
-#if OPENSSL_VERSION_NUMBER >= 0x0090819fL
+#ifdef HAVE_CRYPTO_MEMCMP
   return CRYPTO_memcmp(a.c_str(), b.c_str(), size) == 0;
 #else
   const volatile unsigned char *_a = (const volatile unsigned char *) a.c_str();
@@ -710,9 +660,7 @@ void addTSIG(DNSPacketWriter& pw, TSIGRecordContent& trc, const DNSName& tsigkey
   string toSign = makeTSIGPayload(tsigprevious, reinterpret_cast<const char*>(pw.getContent().data()), pw.getContent().size(), tsigkeyname, trc, timersonly);
 
   if (algo == TSIG_GSS) {
-    if (!gss_add_signature(tsigkeyname, toSign, trc.d_mac)) {
-      throw PDNSException(string("Could not add TSIG signature with algorithm 'gss-tsig' and key name '")+tsigkeyname.toLogString()+string("'"));
-    }
+    throw PDNSException(string("Unsupported TSIG GSS algorithm ") + trc.d_algoName.toLogString());
   } else {
     trc.d_mac = calculateHMAC(tsigsecret, toSign, algo);
     //  trc.d_mac[0]++; // sabotage
@@ -747,10 +695,7 @@ bool validateTSIG(const std::string& packet, size_t sigPos, const TSIGTriplet& t
   tsigMsg = makeTSIGMessageFromTSIGPacket(packet, sigPos, tt.name, trc, previousMAC, timersOnly, dnsHeaderOffset);
 
   if (algo == TSIG_GSS) {
-    GssContext gssctx(tt.name);
-    if (!gss_verify_signature(tt.name, tsigMsg, theirMAC)) {
-      throw std::runtime_error("Signature with TSIG key '"+tt.name.toLogString()+"' failed to validate");
-    }
+    throw std::runtime_error("Unsupported TSIG GSS algorithm " + trc.d_algoName.toLogString());
   } else {
     string ourMac = calculateHMAC(tt.secret, tsigMsg, algo);
 

@@ -38,6 +38,7 @@
 StatBag::StatBag()
 {
   d_doRings=false;
+  d_allowRedeclare=false;
 }
 
 void StatBag::exists(const string &key)
@@ -48,27 +49,30 @@ void StatBag::exists(const string &key)
     }
 }
 
-string StatBag::directory()
+string StatBag::directory(const string &prefix)
 {
   string dir;
   ostringstream o;
 
-  for(const auto& i: d_stats) {
-    if (d_blacklist.find(i.first) != d_blacklist.end())
+  for(const auto& val : d_stats) {
+    if (d_blacklist.find(val.first) != d_blacklist.end())
       continue;
-    o<<i.first<<"="<<*(i.second)<<",";
+    if (val.first.find(prefix) != 0)
+      continue;
+    o << val.first<<"="<<*(val.second)<<",";
   }
 
 
   for(const funcstats_t::value_type& val :  d_funcstats) {
     if (d_blacklist.find(val.first) != d_blacklist.end())
       continue;
+    if (val.first.find(prefix) != 0)
+      continue;
     o << val.first<<"="<<val.second(val.first)<<",";
   }
   dir=o.str();
   return dir;
 }
-
 
 vector<string>StatBag::getEntries()
 {
@@ -97,18 +101,39 @@ string StatBag::getDescrip(const string &item)
   return d_keyDescrips[item];
 }
 
-void StatBag::declare(const string &key, const string &descrip)
+StatType StatBag::getStatType(const string &item)
 {
+  exists(item);
+  return d_statTypes[item];
+}
+
+void StatBag::declare(const string &key, const string &descrip, StatType statType)
+{
+  if(d_stats.count(key)) {
+    if (d_allowRedeclare) {
+      *d_stats[key] = 0;
+      return;
+    }
+    else {
+      throw PDNSException("Attempt to re-declare statbag '"+key+"'");
+    }
+  }
+
   auto i=make_unique<AtomicCounter>(0);
   d_stats[key]=std::move(i);
   d_keyDescrips[key]=descrip;
+  d_statTypes[key]=statType;
 }
 
-void StatBag::declare(const string &key, const string &descrip, StatBag::func_t func)
+void StatBag::declare(const string &key, const string &descrip, StatBag::func_t func, StatType statType)
 {
+  if(d_funcstats.count(key) && !d_allowRedeclare) {
+    throw PDNSException("Attempt to re-declare func statbag '"+key+"'");
+  }
 
   d_funcstats[key]=func;
   d_keyDescrips[key]=descrip;
+  d_statTypes[key]=statType;
 }
 
           
@@ -237,8 +262,8 @@ vector<pair<T, unsigned int> >StatRing<T,Comp>::get() const
 
 void StatBag::registerRingStats(const string& name)
 {
-  declare("ring-" + name + "-size", "Number of entries in the " + name + " ring", [this,name](const std::string&) { return static_cast<uint64_t>(getRingEntriesCount(name)); });
-  declare("ring-" + name + "-capacity", "Maximum number of entries in the " + name + " ring", [this,name](const std::string&) { return static_cast<uint64_t>(getRingSize(name)); });
+  declare("ring-" + name + "-size", "Number of entries in the " + name + " ring", [this,name](const std::string&) { return static_cast<uint64_t>(getRingEntriesCount(name)); }, StatType::gauge);
+  declare("ring-" + name + "-capacity", "Maximum number of entries in the " + name + " ring", [this,name](const std::string&) { return static_cast<uint64_t>(getRingSize(name)); }, StatType::gauge);
 }
 
 void StatBag::declareRing(const string &name, const string &help, unsigned int size)
@@ -250,8 +275,8 @@ void StatBag::declareRing(const string &name, const string &help, unsigned int s
 
 void StatBag::declareComboRing(const string &name, const string &help, unsigned int size)
 {
-  d_comborings.emplace(name, size);
-  d_comborings[name].setHelp(help);
+  d_comboRings.emplace(name, size);
+  d_comboRings[name].setHelp(help);
   registerRingStats(name);
 }
 
@@ -269,9 +294,9 @@ vector<pair<string, unsigned int> > StatBag::getRing(const string &name)
   }
   vector<pair<string, unsigned int> > ret;
 
-  if (d_comborings.count(name)) {
+  if (d_comboRings.count(name)) {
     typedef pair<SComboAddress, unsigned int> stor_t;
-    vector<stor_t> raw =d_comborings[name].get();
+    vector<stor_t> raw =d_comboRings[name].get();
     for(const stor_t& stor :  raw) {
       ret.push_back(make_pair(stor.first.ca.toString(), stor.second));
     }
@@ -295,8 +320,8 @@ void StatBag::resetRing(const string &name)
 {
   if(d_rings.count(name))
     d_rings[name].reset();
-  if(d_comborings.count(name))
-    d_comborings[name].reset();
+  if(d_comboRings.count(name))
+    d_comboRings[name].reset();
   if(d_dnsnameqtyperings.count(name))
     d_dnsnameqtyperings[name].reset();
 }
@@ -305,8 +330,8 @@ void StatBag::resizeRing(const string &name, unsigned int newsize)
 {
   if(d_rings.count(name))
     d_rings[name].resize(newsize);
-  if(d_comborings.count(name))
-    d_comborings[name].resize(newsize);
+  if(d_comboRings.count(name))
+    d_comboRings[name].resize(newsize);
   if(d_dnsnameqtyperings.count(name))
     return d_dnsnameqtyperings[name].resize(newsize);
 }
@@ -316,8 +341,8 @@ uint64_t StatBag::getRingSize(const string &name)
 {
   if(d_rings.count(name))
     return d_rings[name].getSize();
-  if(d_comborings.count(name))
-    return d_comborings[name].getSize();
+  if(d_comboRings.count(name))
+    return d_comboRings[name].getSize();
   if(d_dnsnameqtyperings.count(name))
     return d_dnsnameqtyperings[name].getSize();
   return 0;
@@ -327,8 +352,8 @@ uint64_t StatBag::getRingEntriesCount(const string &name)
 {
   if(d_rings.count(name))
     return d_rings[name].getEntriesCount();
-  if(d_comborings.count(name))
-    return d_comborings[name].getEntriesCount();
+  if(d_comboRings.count(name))
+    return d_comboRings[name].getEntriesCount();
   if(d_dnsnameqtyperings.count(name))
     return d_dnsnameqtyperings[name].getEntriesCount();
   return 0;
@@ -338,8 +363,8 @@ string StatBag::getRingTitle(const string &name)
 {
   if(d_rings.count(name))
     return d_rings[name].getHelp();
-  if(d_comborings.count(name))
-    return d_comborings[name].getHelp();
+  if(d_comboRings.count(name))
+    return d_comboRings[name].getHelp();
   if(d_dnsnameqtyperings.count(name))
     return d_dnsnameqtyperings[name].getHelp();
   return "";
@@ -350,7 +375,7 @@ vector<string>StatBag::listRings()
   vector<string> ret;
   for(auto i=d_rings.begin();i!=d_rings.end();++i)
     ret.push_back(i->first);
-  for(auto i=d_comborings.begin();i!=d_comborings.end();++i)
+  for(auto i=d_comboRings.begin();i!=d_comboRings.end();++i)
     ret.push_back(i->first);
   for(const auto &i : d_dnsnameqtyperings)
     ret.push_back(i.first);
@@ -360,7 +385,7 @@ vector<string>StatBag::listRings()
 
 bool StatBag::ringExists(const string &name)
 {
-  return d_rings.count(name) || d_comborings.count(name) || d_dnsnameqtyperings.count(name);
+  return d_rings.count(name) || d_comboRings.count(name) || d_dnsnameqtyperings.count(name);
 }
 
 void StatBag::blacklist(const string& str) {

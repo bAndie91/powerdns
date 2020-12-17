@@ -274,6 +274,18 @@ union ComboAddress {
       return "invalid "+string(gai_strerror(retval));
   }
 
+  //! Ignores any interface specifiers possibly available in the sockaddr data.
+  string toStringNoInterface() const
+  {
+    char host[1024];
+    if(sin4.sin_family == AF_INET && (nullptr != inet_ntop(sin4.sin_family, &sin4.sin_addr, host, sizeof(host))))
+      return string(host);
+    else if(sin4.sin_family == AF_INET6 && (nullptr != inet_ntop(sin4.sin_family, &sin6.sin6_addr, host, sizeof(host))))
+      return string(host);
+    else
+      return "invalid "+stringerror();
+  }
+
   string toStringWithPort() const
   {
     if(sin4.sin_family==AF_INET)
@@ -339,9 +351,9 @@ union ComboAddress {
         index = 32 + index;
       }
 
-      uint32_t s_addr = ntohl(sin4.sin_addr.s_addr);
+      uint32_t ls_addr = ntohl(sin4.sin_addr.s_addr);
 
-      return ((s_addr & (1<<index)) != 0x00000000);
+      return ((ls_addr & (1<<index)) != 0x00000000);
     }
     if(isIPv6()) {
       if (index >= 128)
@@ -352,14 +364,33 @@ union ComboAddress {
         index = 128 + index;
       }
 
-      uint8_t *s_addr = (uint8_t*)sin6.sin6_addr.s6_addr;
+      uint8_t *ls_addr = (uint8_t*)sin6.sin6_addr.s6_addr;
       uint8_t byte_idx = index / 8;
       uint8_t bit_idx = index % 8;
 
-      return ((s_addr[15-byte_idx] & (1 << bit_idx)) != 0x00);
+      return ((ls_addr[15-byte_idx] & (1 << bit_idx)) != 0x00);
     }
     return false;
   }
+
+  /*! Returns a comma-separated string of IP addresses
+   *
+   * \param c  An stl container with ComboAddresses
+   * \param withPort  Also print the port (default true)
+   * \param portExcept  Print the port, except when this is the port (default 53)
+   */
+  template < template < class ... > class Container, class ... Args >
+  static string caContainerToString(const Container<ComboAddress, Args...>& c, const bool withPort = true, const uint16_t portExcept = 53) {
+  vector<string> strs;
+  for (const auto& ca : c) {
+    if (withPort) {
+      strs.push_back(ca.toStringWithPortExcept(portExcept));
+      continue;
+    }
+    strs.push_back(ca.toString());
+  }
+  return boost::join(strs, ",");
+  };
 };
 
 /** This exception is thrown by the Netmask class and by extension by the NetmaskGroup class */
@@ -412,43 +443,63 @@ class Netmask
 public:
   Netmask()
   {
-    d_network.sin4.sin_family=0; // disable this doing anything useful
+    d_network.sin4.sin_family = 0; // disable this doing anything useful
     d_network.sin4.sin_port = 0; // this guarantees d_network compares identical
-    d_mask=0;
-    d_bits=0;
+    d_mask = 0;
+    d_bits = 0;
   }
 
   Netmask(const ComboAddress& network, uint8_t bits=0xff): d_network(network)
   {
-    d_network.sin4.sin_port=0;
-    d_bits = (network.isIPv4() ? std::min(bits, (uint8_t)32) : std::min(bits, (uint8_t)128));
+    d_network.sin4.sin_port = 0;
+    setBits(network.isIPv4() ? std::min(bits, static_cast<uint8_t>(32)) : std::min(bits, static_cast<uint8_t>(128)));
+  }
 
-    if(d_bits<32)
-      d_mask=~(0xFFFFFFFF>>d_bits);
-    else
-      d_mask=0xFFFFFFFF; // not actually used for IPv6
+  void setBits(uint8_t value)
+  {
+    d_bits = value;
+
+    if (d_bits < 32) {
+      d_mask = ~(0xFFFFFFFF >> d_bits);
+    }
+    else {
+      // note that d_mask is unused for IPv6
+      d_mask = 0xFFFFFFFF;
+    }
+
+    if (isIPv4()) {
+      d_network.sin4.sin_addr.s_addr = htonl(ntohl(d_network.sin4.sin_addr.s_addr) & d_mask);
+    }
+    else if (isIPv6()) {
+      uint8_t bytes = d_bits/8;
+      uint8_t *us = (uint8_t*) &d_network.sin6.sin6_addr.s6_addr;
+      uint8_t bits = d_bits % 8;
+      uint8_t mask = (uint8_t) ~(0xFF>>bits);
+
+      if (bytes < sizeof(d_network.sin6.sin6_addr.s6_addr)) {
+        us[bytes] &= mask;
+      }
+
+      for(size_t idx = bytes + 1; idx < sizeof(d_network.sin6.sin6_addr.s6_addr); ++idx) {
+        us[idx] = 0;
+      }
+    }
   }
 
   //! Constructor supplies the mask, which cannot be changed
   Netmask(const string &mask)
   {
-    pair<string,string> split=splitField(mask,'/');
-    d_network=makeComboAddress(split.first);
+    pair<string,string> split = splitField(mask,'/');
+    d_network = makeComboAddress(split.first);
 
-    if(!split.second.empty()) {
-      d_bits = (uint8_t)pdns_stou(split.second);
-      if(d_bits<32)
-        d_mask=~(0xFFFFFFFF>>d_bits);
-      else
-        d_mask=0xFFFFFFFF;
+    if (!split.second.empty()) {
+      setBits(static_cast<uint8_t>(pdns_stou(split.second)));
     }
-    else if(d_network.sin4.sin_family==AF_INET) {
-      d_bits = 32;
-      d_mask = 0xFFFFFFFF;
+    else if (d_network.sin4.sin_family == AF_INET) {
+      setBits(32);
     }
     else {
-      d_bits=128;
-      d_mask=0;  // silence silly warning - d_mask is unused for IPv6
+      setBits(128);
     }
   }
 
@@ -480,7 +531,7 @@ public:
       uint8_t bits= d_bits % 8;
       uint8_t mask= (uint8_t) ~(0xFF>>bits);
 
-      return((us[n] & mask) == (them[n] & mask));
+      return((us[n]) == (them[n] & mask));
     }
     return false;
   }
@@ -495,53 +546,39 @@ public:
   //! If this IP address in native format matches
   bool match4(uint32_t ip) const
   {
-    return (ip & d_mask) == (ntohl(d_network.sin4.sin_addr.s_addr) & d_mask);
+    return (ip & d_mask) == (ntohl(d_network.sin4.sin_addr.s_addr));
   }
 
   string toString() const
   {
-    return d_network.toString()+"/"+std::to_string((unsigned int)d_bits);
+    return d_network.toStringNoInterface()+"/"+std::to_string((unsigned int)d_bits);
   }
 
   string toStringNoMask() const
   {
-    return d_network.toString();
+    return d_network.toStringNoInterface();
   }
+
   const ComboAddress& getNetwork() const
   {
     return d_network;
   }
-  const ComboAddress getMaskedNetwork() const
+
+  const ComboAddress& getMaskedNetwork() const
   {
-    ComboAddress result(d_network);
-    if(isIPv4()) {
-      result.sin4.sin_addr.s_addr = htonl(ntohl(result.sin4.sin_addr.s_addr) & d_mask);
-    }
-    else if(isIPv6()) {
-      size_t idx;
-      uint8_t bytes=d_bits/8;
-      uint8_t *us=(uint8_t*) &result.sin6.sin6_addr.s6_addr;
-      uint8_t bits= d_bits % 8;
-      uint8_t mask= (uint8_t) ~(0xFF>>bits);
-
-      if (bytes < sizeof(result.sin6.sin6_addr.s6_addr)) {
-        us[bytes] &= mask;
-      }
-
-      for(idx = bytes + 1; idx < sizeof(result.sin6.sin6_addr.s6_addr); ++idx) {
-        us[idx] = 0;
-      }
-    }
-    return result;
+    return getNetwork();
   }
+
   uint8_t getBits() const
   {
     return d_bits;
   }
+
   bool isIPv6() const
   {
     return d_network.sin6.sin6_family == AF_INET6;
   }
+
   bool isIPv4() const
   {
     return d_network.sin4.sin_family == AF_INET;
@@ -983,7 +1020,7 @@ public:
 
     // we turn left on 0 and right on 1
     int bits = 0;
-    for(; node && bits < key.getBits(); bits++) {
+    for(; bits < key.getBits(); bits++) {
       bool vall = key.getBit(-1-bits);
 
       if (bits >= node->d_bits) {
@@ -1091,7 +1128,7 @@ public:
       node = d_root->left.get();
     else if (value.isIPv6())
       node = d_root->right.get();
-    else 
+    else
       throw NetmaskException("invalid address family");
     if (node == nullptr) return nullptr;
 
@@ -1143,7 +1180,7 @@ public:
       node = d_root->left.get();
     else if (key.isIPv6())
       node = d_root->right.get();
-    else 
+    else
       throw NetmaskException("invalid address family");
     // no tree, no value
     if (node == nullptr) return;
@@ -1384,6 +1421,7 @@ int SAccept(int sockfd, ComboAddress& remote);
 int SListen(int sockfd, int limit);
 int SSetsockopt(int sockfd, int level, int opname, int value);
 void setSocketIgnorePMTU(int sockfd);
+bool setReusePort(int sockfd);
 
 #if defined(IP_PKTINFO)
   #define GEN_IP_PKTINFO IP_PKTINFO
@@ -1395,6 +1433,7 @@ bool IsAnyAddress(const ComboAddress& addr);
 bool HarvestDestinationAddress(const struct msghdr* msgh, ComboAddress* destination);
 bool HarvestTimestamp(struct msghdr* msgh, struct timeval* tv);
 void fillMSGHdr(struct msghdr* msgh, struct iovec* iov, cmsgbuf_aligned* cbuf, size_t cbufsize, char* data, size_t datalen, ComboAddress* addr);
+int sendOnNBSocket(int fd, const struct msghdr *msgh);
 ssize_t sendfromto(int sock, const char* data, size_t len, int flags, const ComboAddress& from, const ComboAddress& to);
 size_t sendMsgWithOptions(int fd, const char* buffer, size_t len, const ComboAddress* dest, const ComboAddress* local, unsigned int localItf, int flags);
 
@@ -1402,3 +1441,5 @@ size_t sendMsgWithOptions(int fd, const char* buffer, size_t len, const ComboAdd
 bool isTCPSocketUsable(int sock);
 
 extern template class NetmaskTree<bool>;
+ComboAddress parseIPAndPort(const std::string& input, uint16_t port);
+

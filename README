@@ -1,19 +1,25 @@
-PowerDNS is copyright © 2001-2019 by PowerDNS.COM BV and lots of
+PowerDNS is copyright © 2001-2020 by PowerDNS.COM BV and lots of
 contributors, using the GNU GPLv2 license (see NOTICE for the
 exact license and exception used).
 
 All documentation can be found on https://doc.powerdns.com/
 
 This file may lag behind at times. For most recent updates, always check
-https://doc.powerdns.com/md/changelog/.
+https://doc.powerdns.com/authoritative/changelog/
 
 Another good place to look for information is:
-https://doc.powerdns.com/md/appendix/compiling-powerdns/
+https://doc.powerdns.com/authoritative/appendices/compiling.html
 
 To file bugs, head towards:
 https://github.com/PowerDNS/pdns/issues
 
 But please check if the issue is already reported there first.
+
+DOCKER
+------
+
+This README is mirrored from GitHub to dockerhub.
+For information about our Docker images, please refer to https://github.com/PowerDNS/pdns/blob/master/Docker-README.md
 
 SOURCE CODE / GIT
 -----------------
@@ -42,13 +48,13 @@ This will bring up a USAGE-page which will explain how to build the different re
 
 COMPILING Authoritative Server
 ------------------------------
-The PowerDNS Authoritative Server depends on Boost, OpenSSL and requires a
+The PowerDNS Authoritative Server depends on Boost, OpenSSL and Lua, and requires a
 compiler with C++-2011 support.
 
 On Debian 9, the following is useful:
 
 ```sh
-apt install g++ libboost-all-dev libtool make pkg-config default-libmysqlclient-dev libssl-dev virtualenv libluajit-5.1-dev
+apt install g++ libboost-all-dev libtool make pkg-config default-libmysqlclient-dev libssl-dev libluajit-5.1-dev python3-venv
 ```
 
 When building from git, the following packages are also required:
@@ -60,13 +66,13 @@ apt install autoconf automake ragel bison flex
 For Ubuntu 18.04 (Bionic Beaver), the following packages should be installed:
 
 ```sh
-apt install libcurl4-openssl-dev luajit lua-yaml-dev libyaml-cpp-dev libtolua-dev lua5.3 autoconf automake ragel bison flex g++ libboost-all-dev libtool make pkg-config libssl-dev virtualenv lua-yaml-dev libyaml-cpp-dev libluajit-5.1-dev libcurl4 gawk
+apt install libcurl4-openssl-dev luajit lua-yaml-dev libyaml-cpp-dev libtolua-dev lua5.3 autoconf automake ragel bison flex g++ libboost-all-dev libtool make pkg-config libssl-dev lua-yaml-dev libyaml-cpp-dev libluajit-5.1-dev libcurl4 gawk libsqlite3-dev python3-venv
 # For DNSSEC ed25519 (algorithm 15) support with --with-libsodium
 apt install libsodium-dev
 # If using the gmysql (Generic MySQL) backend
 apt install default-libmysqlclient-dev
 # If using the gpgsql (Generic PostgreSQL) backend
-apt install postgresql-server-dev-10
+apt install libpq-dev
 # If using --enable-systemd (will create the service scripts so it can be managed with systemctl/service)
 apt install libsystemd0 libsystemd-dev
 # If using the geoip backend
@@ -119,62 +125,6 @@ Building the HTML documentation
 
 The HTML documentation (as seen [on the PowerDNS docs site](https://doc.powerdns.com/authoritative/)) is built from ReStructured Text (rst) files located in `docs`. They are compiled into HTML files using [Sphinx](http://www.sphinx-doc.org/en/master/index.html), a documentation generator tool which is built in Python.
 
-**Using a normal Python installation**
-
-For those simply contributing to the documentation, this avoids needing to install the various build
-tools and other dependencies.
-
-Install Python 2.7 or Python 3 (preferable) if you don't yet have it installed. On some operating
-systems you may also have to install `python3-pip` or similarly named.
-
-Ubuntu 16.04 / 18.04
-
-```sh
-apt update
-apt install python3 python3-pip python3-venv
-```
-
-macOS (using homebrew)
-
-```sh
-brew install python3
-```
-
-Update your `pip` and install/update `virtualenv` to avoid problems:
-
-```sh
-# for python2, use "pip" instead of "pip3"
-pip3 install -U pip
-pip3 install -U virtualenv
-```
-
-Enter the repository's `docs` folder, set up the virtualenv, and install the requirements
-
-```sh
-cd docs
-# for python2, use "virtualenv .venv" instead
-python3 -m venv .venv
-source .venv/bin/activate
-# The virtualenv may use an older pip, so upgrade it again
-pip3 install -U pip setuptools setuptools-git
-# Now you can install the requirements
-pip3 install -r requirements.txt
-```
-
-Finally, you can build the documentation:
-
-```sh
-sphinx-build . html-docs
-```
-
-Note: If your shell has problems finding sphinx-build, try using `.venv/bin/sphinx-build` instead.
-
-The HTML documentation is now available in `html-docs`.
-
-**Using the build tools**
-
-This method is preferable for those who already have a working build environment for PowerDNS.
-
 Install the dependencies under "COMPILING", and run autoreconf if you haven't already:
 
 ```sh
@@ -189,12 +139,6 @@ make html-docs
 ```
 
 The HTML documentation will now be available in `html-docs`.
-
-Solaris Notes
--------------
-Use a recent gcc (and other build tools), possibly from Solaris 11 IPS.
-
-If you encounter problems with the Solaris make, gmake is advised.
 
 FreeBSD Notes
 -------------

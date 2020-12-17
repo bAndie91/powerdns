@@ -38,10 +38,8 @@ public:
   bool list(const DNSName &target, int id, bool include_disabled) override;
 
   bool getDomainInfo(const DNSName &domain, DomainInfo &di, bool getSerial=true) override;
-  bool createDomain(const DNSName &domain, const string &type, const string &masters, const string &account);
+  bool createDomain(const DNSName &domain, const DomainInfo::DomainKind kind, const vector<ComboAddress> &masters, const string &account) override;
 
-  bool createDomain(const DNSName &domain) override;
-  
   bool startTransaction(const DNSName &domain, int domain_id=-1) override;
   bool commitTransaction() override;
   bool abortTransaction() override;
@@ -57,7 +55,7 @@ public:
 
   void getUnfreshSlaveInfos(vector<DomainInfo>* domains) override;
   
-  bool setMaster(const DNSName &domain, const string &ip) override;
+  bool setMasters(const DNSName &domain, const vector<ComboAddress> &masters) override;
   bool setKind(const DNSName &domain, const DomainInfo::DomainKind kind) override;
   bool getAllDomainMetadata(const DNSName& name, std::map<std::string, std::vector<std::string> >& meta) override;
   bool getDomainMetadata(const DNSName& name, const std::string& kind, std::vector<std::string>& meta) override
@@ -258,11 +256,18 @@ private:
   int genChangeDomain(const DNSName& domain, std::function<void(DomainInfo&)> func);
   int genChangeDomain(uint32_t id, std::function<void(DomainInfo&)> func);
   void deleteDomainRecords(RecordsRWTransaction& txn, uint32_t domain_id, uint16_t qtype=QType::ANY);
+
+  bool upgradeToSchemav3();
   
   bool get_list(DNSZoneRecord &rr);
   bool get_lookup(DNSZoneRecord &rr);
   std::string d_matchkey;
   DNSName d_lookupdomain;
+
+  vector<DNSResourceRecord> d_currentrrset;
+  size_t d_currentrrsetpos;
+  MDBOutVal d_currentKey;
+  MDBOutVal d_currentVal;
   
   DNSName d_transactiondomain;
   uint32_t d_transactiondomainid;

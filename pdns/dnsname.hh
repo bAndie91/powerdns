@@ -63,16 +63,34 @@ class DNSName
 {
 public:
   DNSName()  {}          //!< Constructs an *empty* DNSName, NOT the root!
+  // Work around assertion in some boost versions that do not like self-assignment of boost::container::string
+  DNSName& operator=(const DNSName& rhs)
+  {
+    if (this != &rhs) {
+      d_storage = rhs.d_storage;
+    }
+    return *this;
+  }
+  DNSName& operator=(DNSName&& rhs)
+  {
+    if (this != &rhs) {
+      d_storage = std::move(rhs.d_storage);
+    }
+    return *this;
+  }
+  DNSName(const DNSName& a) = default;
+  DNSName(DNSName&& a) = default;
   explicit DNSName(const char* p): DNSName(p, std::strlen(p)) {} //!< Constructs from a human formatted, escaped presentation
   explicit DNSName(const char* p, size_t len);      //!< Constructs from a human formatted, escaped presentation
   explicit DNSName(const std::string& str) : DNSName(str.c_str(), str.length()) {}; //!< Constructs from a human formatted, escaped presentation
   DNSName(const char* p, int len, int offset, bool uncompress, uint16_t* qtype=nullptr, uint16_t* qclass=nullptr, unsigned int* consumed=nullptr, uint16_t minOffset=0); //!< Construct from a DNS Packet, taking the first question if offset=12. If supplied, consumed is set to the number of bytes consumed from the packet, which will not be equal to the wire length of the resulting name in case of compression.
   
-  bool isPartOf(const DNSName& rhs) const;   //!< Are we part of the rhs name?
+  bool isPartOf(const DNSName& rhs) const;   //!< Are we part of the rhs name? Note that name.isPartOf(name).
   inline bool operator==(const DNSName& rhs) const; //!< DNS-native comparison (case insensitive) - empty compares to empty
   bool operator!=(const DNSName& other) const { return !(*this == other); }
 
   std::string toString(const std::string& separator=".", const bool trailing=true) const;              //!< Our human-friendly, escaped, representation
+  void toString(std::string& output, const std::string& separator=".", const bool trailing=true) const;
   std::string toLogString() const; //!< like plain toString, but returns (empty) on empty names
   std::string toStringNoDot() const { return toString(".", false); }
   std::string toStringRootDot() const { if(isRoot()) return "."; else return toString(".", false); }

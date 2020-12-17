@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "PDNSUTIL" "1" "Sep 22, 2020" "" "PowerDNS Authoritative Server"
+.TH "PDNSUTIL" "1" "Dec 17, 2020" "" "PowerDNS Authoritative Server"
 .SH NAME
 pdnsutil \- PowerDNS record and DNSSEC command and control
 .
@@ -172,10 +172,12 @@ require a DS update at the parent zone!
 .B set\-publish\-cds \fIZONE\fP [\fIDIGESTALGOS\fP]
 Set \fIZONE\fP to respond to queries for its CDS records. the optional
 argument \fIDIGESTALGOS\fP should be a comma\-separated list of DS
-algorithms to use. By default, this is 2 (SHA\-256).
+algorithms to use. By default, this is 2 (SHA\-256). 0 will publish a
+CDS with a DNSSEC delete algorithm.
 .TP
-.B set\-publish\-cdnskey \fIZONE\fP
-Set \fIZONE\fP to publish CDNSKEY records.
+set\-publish\-cdnskey \fIZONE\fP [\fBdelete\fP]
+Set \fIZONE\fP to publish CDNSKEY records. Add \(aqdelete\(aq to publish a CDNSKEY
+with a DNSSEC delete algorithm.
 .TP
 .B unset\-publish\-cds \fIZONE\fP
 Set \fIZONE\fP to stop responding to queries for its CDS records.
@@ -231,6 +233,9 @@ Show a list of all configured TSIG keys.
 .B add\-record \fIZONE\fP \fINAME\fP \fITYPE\fP [\fITTL\fP] \fICONTENT\fP
 Add one or more records of \fINAME\fP and \fITYPE\fP to \fIZONE\fP with \fICONTENT\fP
 and optional \fITTL\fP\&. If \fITTL\fP is not set, default will be used.
+.TP
+.B add\-supermaster \fIIP\fP \fINAMESERVER\fP [\fIACCOUNT\fP]
+Add a supermaster entry into the backend. This enables receiving zone updates from other servers.
 .TP
 .B create\-zone \fIZONE\fP
 Create an empty zone named \fIZONE\fP\&.
@@ -355,10 +360,10 @@ If \fIFILE\fP is not specified, powerdns.com is used.
 .SH OTHER TOOLS
 .INDENT 0.0
 .TP
-.B ipencrypt \fIIP\-ADDRESS\fP passsword
+.B ipencrypt \fIIP\-ADDRESS\fP password
 Encrypt an IP address according to the \(aqipcipher\(aq standard
 .TP
-.B ipdecrypt \fIIP\-ADDRESS\fP passsword
+.B ipdecrypt \fIIP\-ADDRESS\fP password
 Encrypt an IP address according to the \(aqipcipher\(aq standard
 .UNINDENT
 .SH SEE ALSO

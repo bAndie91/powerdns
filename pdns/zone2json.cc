@@ -65,7 +65,7 @@ static Json::object emitRecord(const string& zoneName, const DNSName &DNSqname, 
     string::size_type pos = content.find_first_not_of("0123456789");
     if(pos != string::npos)
       boost::erase_head(content, pos);
-    trim_left(content);
+    boost::trim_left(content);
   }
 
   Json::object dict;
@@ -103,11 +103,6 @@ try
     ::arg().set("zone","Zonefile to parse")="";
     ::arg().set("zone-name","Specify an $ORIGIN in case it is not present")="";
     ::arg().set("named-conf","Bind 8/9 named.conf to parse")="";
-    
-    ::arg().set("soa-minimum-ttl","Do not change")="0";
-    ::arg().set("soa-refresh-default","Do not change")="0";
-    ::arg().set("soa-retry-default","Do not change")="0";
-    ::arg().set("soa-expire-default","Do not change")="0";
     ::arg().set("max-generate-steps", "Maximum number of $GENERATE steps when loading a zone from a file")="0";
 
     ::arg().setCmd("help","Provide a helpful message");

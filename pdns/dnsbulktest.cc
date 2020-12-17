@@ -34,6 +34,8 @@
 #include "misc.hh"
 #include "dnswriter.hh"
 #include "dnsrecords.hh"
+#include "dns_random.hh"
+#include "arguments.hh"
 
 using namespace boost::accumulators;
 namespace po = boost::program_options;
@@ -41,6 +43,12 @@ namespace po = boost::program_options;
 po::variables_map g_vm;
 
 StatBag S;
+
+ArgvMap &arg()
+{
+  static ArgvMap theArg;
+  return theArg;
+}
 
 bool g_quiet=false;
 bool g_envoutput=false;
@@ -64,7 +72,7 @@ struct SendReceive
   typedef int Identifier;
   typedef DNSResult Answer; // ip 
   int d_socket;
-  deque<uint16_t> d_idqueue;
+  std::deque<uint16_t> d_idqueue;
     
   typedef accumulator_set<
         double
@@ -207,7 +215,7 @@ struct SendReceive
   unsigned int d_receiveds, d_receiveerrors, d_senderrors;
 };
 
-void usage(po::options_description &desc) {
+static void usage(po::options_description &desc) {
   cerr << "Usage: dnsbulktest [OPTION].. IPADDRESS PORTNUMBER [LIMIT]"<<endl;
   cerr << desc << "\n";
 }
@@ -215,6 +223,9 @@ void usage(po::options_description &desc) {
 int main(int argc, char** argv)
 try
 {
+  ::arg().set("rng", "Specify random number generator to use. Valid values are auto,sodium,openssl,getrandom,arc4random,urandom.")="auto";
+  ::arg().set("entropy-source", "If set, read entropy from this file")="/dev/urandom";
+
   po::options_description desc("Allowed options");
   desc.add_options()
     ("help,h", "produce help message")
@@ -287,7 +298,7 @@ try
     if(limit && domains.size() >= limit)
       break;
 
-    trim_right(line);
+    boost::trim_right(line);
     if(line.empty() || line[0] == '#')
       continue;
     split=splitField(line,',');
@@ -307,7 +318,7 @@ try
       domains.push_back(TypedQuery("www."+split.second, qtype));
   }
   cerr<<"Read "<<domains.size()<<" domains!"<<endl;
-  random_shuffle(domains.begin(), domains.end());
+  shuffle(domains.begin(), domains.end(), pdns::dns_random_engine());
 
   boost::format datafmt("%s %|20t|%+15s  %|40t|%s %|60t|%+15s\n");
 

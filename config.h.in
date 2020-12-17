@@ -3,9 +3,6 @@
 /* Set to the user and host that builds PowerDNS */
 #undef BUILD_HOST
 
-/* Define to 1 if you want to enable GSS-TSIG support */
-#undef ENABLE_GSS_TSIG
-
 /* Define to 1 if you have the `accept4' function. */
 #undef HAVE_ACCEPT4
 
@@ -52,6 +49,9 @@
 /* Define to 1 if you have the `crypto_box_easy_afternm' function. */
 #undef HAVE_CRYPTO_BOX_EASY_AFTERNM
 
+/* Define to 1 if you have the `CRYPTO_memcmp' function. */
+#undef HAVE_CRYPTO_MEMCMP
+
 /* define if the compiler supports basic C++11 syntax */
 #undef HAVE_CXX11
 
@@ -73,6 +73,12 @@
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
+
+/* Define to 1 if you have the `EVP_MD_CTX_free' function. */
+#undef HAVE_EVP_MD_CTX_FREE
+
+/* Define to 1 if you have the `EVP_MD_CTX_new' function. */
+#undef HAVE_EVP_MD_CTX_NEW
 
 /* Define if ASAN fiber annotation interface is available. */
 #undef HAVE_FIBER_SANITIZER
@@ -168,6 +174,9 @@
 /* Define this if you have Maxmind DB */
 #undef HAVE_MMDB
 
+/* Define to 1 if you have the `OPENSSL_init_crypto' function. */
+#undef HAVE_OPENSSL_INIT_CRYPTO
+
 /* Define to 1 if you have p11-kit-1 */
 #undef HAVE_P11KIT1
 
@@ -206,6 +215,9 @@
 
 /* Define to 1 if you have the `recvmmsg' function. */
 #undef HAVE_RECVMMSG
+
+/* Define to 1 if you have the `RSA_get0_key' function. */
+#undef HAVE_RSA_GET0_KEY
 
 /* Define to 1 if you have the <sanitizer/common_interface_defs.h> header
    file. */

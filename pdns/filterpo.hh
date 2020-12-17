@@ -74,13 +74,24 @@ public:
   static std::string getKindToString(PolicyKind kind);
   static std::string getTypeToString(PolicyType type);
 
+  struct PolicyZoneData
+  {
+    /* shared by all the policies from a single zone */
+    std::unordered_set<std::string> d_tags;
+    std::string d_name;
+    std::string d_extendedErrorExtra;
+    boost::optional<uint16_t> d_extendedErrorCode{boost::none};
+    Priority d_priority{maximumPriority};
+    bool d_policyOverridesGettag{true};
+  };
+
   struct Policy
   {
-    Policy(): d_name(nullptr), d_ttl(0), d_priority(maximumPriority), d_kind(PolicyKind::NoAction), d_type(PolicyType::None)
+    Policy(): d_ttl(0), d_kind(PolicyKind::NoAction), d_type(PolicyType::None)
     {
     }
 
-    Policy(PolicyKind kind, PolicyType type, int32_t ttl=0, std::shared_ptr<std::string> name=nullptr, const std::vector<std::shared_ptr<DNSRecordContent>>& custom={}): d_custom(custom), d_name(name), d_ttl(ttl), d_priority(maximumPriority), d_kind(kind), d_type(type)
+    Policy(PolicyKind kind, PolicyType type, int32_t ttl=0, std::shared_ptr<PolicyZoneData> data=nullptr, const std::vector<std::shared_ptr<DNSRecordContent>>& custom={}): d_custom(custom), d_zoneData(data), d_ttl(ttl), d_kind(kind), d_type(type)
     {
     }
 
@@ -88,14 +99,71 @@ public:
     {
       return d_kind == rhs.d_kind && d_type == rhs.d_type && d_ttl == rhs.d_ttl && d_custom == rhs.d_custom;
     }
+
+    const std::string& getName() const
+    {
+      static const std::string notSet;
+      if (d_zoneData) {
+        return d_zoneData->d_name;
+      }
+      return notSet;
+    }
+
+    void setName(const std::string& name)
+    {
+      /* until now the PolicyZoneData was shared,
+         we now need to copy it, then write to it */
+      std::shared_ptr<PolicyZoneData> newZoneData;
+      if (d_zoneData) {
+        newZoneData = std::make_shared<PolicyZoneData>(*d_zoneData);
+      }
+      else {
+        newZoneData = std::make_shared<PolicyZoneData>();
+      }
+      newZoneData->d_name = name;
+      d_zoneData = newZoneData;
+    }
+
+    const std::unordered_set<std::string>& getTags() const
+    {
+      static const std::unordered_set<std::string> notSet;
+      if (d_zoneData) {
+        return d_zoneData->d_tags;
+      }
+      return notSet;
+    }
+
+    Priority getPriority() const
+    {
+      static Priority notSet = maximumPriority;
+      if (d_zoneData) {
+        return d_zoneData->d_priority;
+      }
+      return notSet;
+    }
+
+    bool policyOverridesGettag() const {
+      if (d_zoneData) {
+        return d_zoneData->d_policyOverridesGettag;
+      }
+      return true;
+    }
+
+    bool wasHit() const
+    {
+      return (d_type != DNSFilterEngine::PolicyType::None && d_kind != DNSFilterEngine::PolicyKind::NoAction);
+    }
+
+    std::string getLogString() const;
     std::vector<DNSRecord> getCustomRecords(const DNSName& qname, uint16_t qtype) const;
     std::vector<DNSRecord> getRecords(const DNSName& qname) const;
 
     std::vector<std::shared_ptr<DNSRecordContent>> d_custom;
-    std::shared_ptr<std::string> d_name; // the name of the policy
+    std::shared_ptr<PolicyZoneData> d_zoneData{nullptr};
+    DNSName d_trigger;
+    string d_hit;
     /* Yup, we are currently using the same TTL for every record for a given name */
     int32_t d_ttl;
-    Priority d_priority;
     PolicyKind d_kind;
     PolicyType d_type;
 
@@ -105,6 +173,10 @@ public:
 
   class Zone {
   public:
+    Zone(): d_zoneData(std::make_shared<PolicyZoneData>())
+    {
+    }
+
     void clear()
     {
       d_qpolAddr.clear();
@@ -119,7 +191,7 @@ public:
     }
     void setName(const std::string& name)
     {
-      d_name = std::make_shared<std::string>(name);
+      d_zoneData->d_name = name;
     }
     void setDomain(const DNSName& domain)
     {
@@ -133,9 +205,26 @@ public:
     {
       d_refresh = refresh;
     }
-    const std::shared_ptr<std::string> getName() const
+    void setTags(std::unordered_set<std::string>&& tags)
     {
-      return d_name;
+      d_zoneData->d_tags = std::move(tags);
+    }
+    void setPolicyOverridesGettag(bool flag)
+    {
+      d_zoneData->d_policyOverridesGettag = flag;
+    }
+    void setExtendedErrorCode(uint16_t code)
+    {
+      d_zoneData->d_extendedErrorCode = code;
+    }
+    void setExtendedErrorExtra(const std::string& extra)
+    {
+      d_zoneData->d_extendedErrorExtra = extra;
+    }
+
+    const std::string& getName() const
+    {
+      return d_zoneData->d_name;
     }
 
     DNSName getDomain() const
@@ -160,11 +249,11 @@ public:
 
     void dump(FILE * fp) const;
 
-    void addClientTrigger(const Netmask& nm, Policy&& pol);
-    void addQNameTrigger(const DNSName& nm, Policy&& pol, bool ignoreDuplicate=false);
-    void addNSTrigger(const DNSName& dn, Policy&& pol);
-    void addNSIPTrigger(const Netmask& nm, Policy&& pol);
-    void addResponseTrigger(const Netmask& nm, Policy&& pol);
+    void addClientTrigger(const Netmask& nm, Policy&& pol, bool ignoreDuplicate = false);
+    void addQNameTrigger(const DNSName& nm, Policy&& pol, bool ignoreDuplicate = false);
+    void addNSTrigger(const DNSName& dn, Policy&& pol, bool ignoreDuplicate = false);
+    void addNSIPTrigger(const Netmask& nm, Policy&& pol, bool ignoreDuplicate = false);
+    void addResponseTrigger(const Netmask& nm, Policy&& pol, bool ignoreDuplicate = false);
 
     bool rmClientTrigger(const Netmask& nm, const Policy& pol);
     bool rmQNameTrigger(const DNSName& nm, const Policy& pol);
@@ -199,28 +288,21 @@ public:
       return !d_postpolAddr.empty();
     }
     Priority getPriority() const {
-      return d_priority;
+      return d_zoneData->d_priority;
     }
     void setPriority(Priority p) {
-      d_priority = p;
-      for (auto& pair : d_qpolName) {
-        pair.second.d_priority = p;
-      }
-      for (auto& pair : d_propolName) {
-        pair.second.d_priority = p;
-      }
-      for (auto& pair : d_qpolAddr) {
-        pair.second.d_priority = p;
-      }
-      for (auto& pair : d_propolNSAddr) {
-        pair.second.d_priority = p;
-      }
-      for (auto& pair : d_postpolAddr) {
-        pair.second.d_priority = p;
-      }
+      d_zoneData->d_priority = p;
     }
-  private:
+    
     static DNSName maskToRPZ(const Netmask& nm);
+
+  private:
+    void addNameTrigger(std::unordered_map<DNSName,Policy>& map, const DNSName& n, Policy&& pol, bool ignoreDuplicate, PolicyType ptype);
+    void addNetmaskTrigger(NetmaskTree<Policy>& nmt, const Netmask& nm, Policy&& pol, bool ignoreDuplicate, PolicyType ptype);
+    bool rmNameTrigger(std::unordered_map<DNSName,Policy>& map, const DNSName& n, const Policy& pol);
+    bool rmNetmaskTrigger(NetmaskTree<Policy>& nmt, const Netmask& nm, const Policy& pol);
+
+  private:
     static bool findExactNamedPolicy(const std::unordered_map<DNSName, DNSFilterEngine::Policy>& polmap, const DNSName& qname, DNSFilterEngine::Policy& pol);
     static bool findNamedPolicy(const std::unordered_map<DNSName, DNSFilterEngine::Policy>& polmap, const DNSName& qname, DNSFilterEngine::Policy& pol);
     static void dumpNamedPolicy(FILE* fp, const DNSName& name, const Policy& pol);
@@ -232,10 +314,9 @@ public:
     NetmaskTree<Policy> d_propolNSAddr;     // NSIP (RPZ)
     NetmaskTree<Policy> d_postpolAddr;      // IP trigger (RPZ)
     DNSName d_domain;
-    std::shared_ptr<std::string> d_name;
+    std::shared_ptr<PolicyZoneData> d_zoneData{nullptr};
     uint32_t d_serial{0};
     uint32_t d_refresh{0};
-    Priority d_priority{0};
   };
 
   DNSFilterEngine();
@@ -259,9 +340,9 @@ public:
   }
   const std::shared_ptr<Zone> getZone(const std::string& name) const
   {
-    for (const auto zone : d_zones) {
+    for (const auto& zone : d_zones) {
       const auto& zName = zone->getName();
-      if (zName && *zName == name) {
+      if (zName == name) {
         return zone;
       }
     }
@@ -282,36 +363,50 @@ public:
     }
   }
 
-  bool getQueryPolicy(const DNSName& qname, const ComboAddress& nm, const std::unordered_map<std::string,bool>& discardedPolicies, Policy& policy) const;
+  bool getQueryPolicy(const DNSName& qname, const std::unordered_map<std::string,bool>& discardedPolicies, Policy& policy) const;
+  bool getClientPolicy(const ComboAddress& ca, const std::unordered_map<std::string,bool>& discardedPolicies, Policy& policy) const;
   bool getProcessingPolicy(const DNSName& qname, const std::unordered_map<std::string,bool>& discardedPolicies, Policy& policy) const;
   bool getProcessingPolicy(const ComboAddress& address, const std::unordered_map<std::string,bool>& discardedPolicies, Policy& policy) const;
   bool getPostPolicy(const vector<DNSRecord>& records, const std::unordered_map<std::string,bool>& discardedPolicies, Policy& policy) const;
+  bool getPostPolicy(const DNSRecord& record, const std::unordered_map<std::string,bool>& discardedPolicies, Policy& policy) const;
 
   // A few convenience methods for the unit test code
-  Policy getQueryPolicy(const DNSName& qname, const ComboAddress& nm, const std::unordered_map<std::string,bool>& discardedPolicies, Priority p) const {
+  Policy getQueryPolicy(const DNSName& qname, const std::unordered_map<std::string,bool>& discardedPolicies, Priority p) const {
     Policy policy;
-    policy.d_priority = p;
-    getQueryPolicy(qname, nm, discardedPolicies, policy);
+    policy.d_zoneData = std::make_shared<PolicyZoneData>();
+    policy.d_zoneData->d_priority = p;
+    getQueryPolicy(qname, discardedPolicies, policy);
+    return policy;
+  }
+
+  Policy getClientPolicy(const ComboAddress& ca, const std::unordered_map<std::string,bool>& discardedPolicies, Priority p) const {
+    Policy policy;
+    policy.d_zoneData = std::make_shared<PolicyZoneData>();
+    policy.d_zoneData->d_priority = p;
+    getClientPolicy(ca, discardedPolicies, policy);
     return policy;
   }
 
   Policy getProcessingPolicy(const DNSName& qname, const std::unordered_map<std::string,bool>& discardedPolicies, Priority p) const {
     Policy policy;
-    policy.d_priority = p;
+    policy.d_zoneData = std::make_shared<PolicyZoneData>();
+    policy.d_zoneData->d_priority = p;
     getProcessingPolicy(qname, discardedPolicies, policy);
     return policy;
   }
 
   Policy getProcessingPolicy(const ComboAddress& address, const std::unordered_map<std::string,bool>& discardedPolicies, Priority p) const {
     Policy policy;
-    policy.d_priority = p;
+    policy.d_zoneData = std::make_shared<PolicyZoneData>();
+    policy.d_zoneData->d_priority = p;
     getProcessingPolicy(address, discardedPolicies, policy);
     return policy;
   }
 
   Policy getPostPolicy(const vector<DNSRecord>& records, const std::unordered_map<std::string,bool>& discardedPolicies, Priority p) const {
     Policy policy;
-    policy.d_priority = p;
+    policy.d_zoneData = std::make_shared<PolicyZoneData>();
+    policy.d_zoneData->d_priority = p;
     getPostPolicy(records, discardedPolicies, policy);
     return policy;
   }
@@ -323,3 +418,5 @@ private:
   void assureZones(size_t zone);
   vector<std::shared_ptr<Zone>> d_zones;
 };
+
+void mergePolicyTags(std::unordered_set<std::string>& tags, const std::unordered_set<std::string>& newTags);

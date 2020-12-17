@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "SDIG" "1" "Sep 22, 2020" "" "PowerDNS Authoritative Server"
+.TH "SDIG" "1" "Dec 17, 2020" "" "PowerDNS Authoritative Server"
 .SH NAME
 sdig \- Perform a DNS query and show the results
 .
@@ -32,13 +32,15 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 ..
 .SH SYNOPSIS
 .sp
-\fBsdig\fP \fIIP\-ADDRESS\-OR\-DOH\-URL * *PORT\fP \fIQNAME\fP \fIQTYPE\fP [\fIOPTION\fP]
+\fBsdig\fP \fIIP\-ADDRESS\-OR\-DOH\-URL\fP \fIPORT\fP \fIQNAME\fP \fIQTYPE\fP [\fIOPTION\fP]
 .SH DESCRIPTION
 .sp
 \fBsdig\fP sends a DNS query to \fIIP\-ADDRESS\-OR\-DOH\-URL\fP on port \fIPORT\fP and displays the answer in a formatted way.
 If the address starts with an \fBh\fP, it is assumed to be a DoH endpoint, and \fIPORT\fP is ignored.
 If qname and qtype are both \fI\-\fP and tcp is used, multiple lines are read from stdin, where each line contains a qname and a type.
 If the address is \fBstdin\fP, a DNS packet is read from stdin instead of from the network, and \fIPORT\fP is ignored.
+All input is literal and case sensitive.
+Queries need option \fIrecurse\fP to expect a resource record reply if the query target is not known to be the authoritative server for that record.
 .SH OPTIONS
 .sp
 These options can be added to the commandline in any order.
@@ -59,6 +61,9 @@ Don\(aqt show the SOA serial in the response.
 .B hidettl
 Replace TTLs with \fI[ttl]\fP in the response.
 .TP
+.B proxy \fITCP?\fP \fISRC\fP \fIDST\fP
+Wrap query in PROXYv2 protocol with these parameters. The first parameter accepts 0 for UDP and 1 for TCP. The second and third take IP addresses and port.
+.TP
 .B recurse
 Set the RD bit in the question.
 .TP
@@ -68,8 +73,18 @@ Show the NSEC3 flags in the response (they are hidden by default).
 .B tcp
 Use TCP instead of UDP to send the query.
 .TP
-.B xpf \fIXPFCODE\fP \fIXPFVERSION\fP \fIXPFPROTO\fP \fIXPFSRC\fP \fIXPFSRC\fP
+.B xpf \fIXPFCODE\fP \fIXPFVERSION\fP \fIXPFPROTO\fP \fIXPFSRC\fP \fIXPFDST\fP
 Send an \fIXPF\fP additional with these parameters.
+.UNINDENT
+.SH EXAMPLES
+.INDENT 0.0
+.TP
+.B Simple queries to local resolvers
+sdig 127.0.0.1 53 example.com AAAA recurse
+sdig ::1 53 example.com A recurse
+.TP
+.B Query to a DNS\-over\-HTTPS server requesting dnssec and recursion
+sdig \fI\%https://dns.example.net/dns\-query\fP 443 example.com A dnssec recurse
 .UNINDENT
 .SH AUTHOR
 PowerDNS.COM BV

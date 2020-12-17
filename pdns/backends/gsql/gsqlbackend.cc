@@ -41,16 +41,21 @@
 GSQLBackend::GSQLBackend(const string &mode, const string &suffix)
 {
   setArgPrefix(mode+suffix);
-  d_db=0;
+  d_db = nullptr;
   d_logprefix="["+mode+"Backend"+suffix+"] ";
 
-  try
-  {
+  try {
     d_dnssecQueries = mustDo("dnssec");
   }
-  catch (const ArgException&)
-  {
+  catch (const ArgException&) {
     d_dnssecQueries = false;
+  }
+
+  try {
+    d_upgradeContent = ::arg().mustDo("upgrade-unknown-types");
+  }
+  catch (const ArgException&) {
+    d_upgradeContent = false;
   }
 
   d_NoIdQuery=getArg("basic-query");
@@ -65,6 +70,7 @@ GSQLBackend::GSQLBackend(const string &mode, const string &suffix)
   d_InfoOfAllSlaveDomainsQuery=getArg("info-all-slaves-query");
   d_SuperMasterInfoQuery=getArg("supermaster-query");
   d_GetSuperMasterIPs=getArg("supermaster-name-to-ips");
+  d_AddSuperMaster=getArg("supermaster-add"); 
   d_InsertZoneQuery=getArg("insert-zone-query");
   d_InsertRecordQuery=getArg("insert-record-query");
   d_UpdateMasterOfZoneQuery=getArg("update-master-query");
@@ -134,6 +140,7 @@ GSQLBackend::GSQLBackend(const string &mode, const string &suffix)
   d_InfoOfAllSlaveDomainsQuery_stmt = NULL;
   d_SuperMasterInfoQuery_stmt = NULL;
   d_GetSuperMasterIPs_stmt = NULL;
+  d_AddSuperMaster_stmt = NULL;
   d_InsertZoneQuery_stmt = NULL;
   d_InsertRecordQuery_stmt = NULL;
   d_InsertEmptyNonTerminalOrderQuery_stmt = NULL;
@@ -216,19 +223,26 @@ void GSQLBackend::setFresh(uint32_t domain_id)
   }
 }
 
-bool GSQLBackend::setMaster(const DNSName &domain, const string &ip)
+bool GSQLBackend::setMasters(const DNSName &domain, const vector<ComboAddress> &masters)
 {
+  vector<string> masters_s;
+  for (const auto& master : masters) {
+    masters_s.push_back(master.toStringWithPortExcept(53));
+  }
+
+  auto tmp = boost::join(masters_s, ", ");
+
   try {
     reconnectIfNeeded();
 
     d_UpdateMasterOfZoneQuery_stmt->
-      bind("master", ip)->
+      bind("master", tmp)->
       bind("domain", domain)->
       execute()->
       reset();
   }
   catch (SSqlException &e) {
-    throw PDNSException("GSQLBackend unable to set master of domain '"+domain.toLogString()+"' to IP address " + ip + ": "+e.txtReason());
+    throw PDNSException("GSQLBackend unable to set masters of domain '"+domain.toLogString()+"' to " + tmp + ": "+e.txtReason());
   }
   return true;
 }
@@ -408,11 +422,11 @@ void GSQLBackend::getUnfreshSlaveInfos(vector<DomainInfo> *unfreshDomains)
       }
     }
     catch(const std::exception& exp) {
-      g_log<<Logger::Warning<<"Error while parsing SOA data for slave zone '"<<slave.zone.toLogString()<<"': "<<exp.what()<<endl;
+      g_log<<Logger::Warning<<"Error while parsing SOA data for slave zone '"<<slave.zone<<"': "<<exp.what()<<endl;
       continue;
     }
     catch(...) {
-      g_log<<Logger::Warning<<"Error while parsing SOA data for slave zone '"<<slave.zone.toLogString()<<"', skipping"<<endl;
+      g_log<<Logger::Warning<<"Error while parsing SOA data for slave zone '"<<slave.zone<<"', skipping"<<endl;
       continue;
     }
   }
@@ -1206,6 +1220,26 @@ skiprow:
   return false;
 }
 
+bool GSQLBackend::superMasterAdd(const string &ip, const string &nameserver, const string &account)
+{
+  try{
+    reconnectIfNeeded();
+
+    d_AddSuperMaster_stmt -> 
+      bind("ip",ip)->
+      bind("nameserver",nameserver)->
+      bind("account",account)->
+      execute()->
+      reset();
+
+  }
+  catch (SSqlException &e){
+    throw PDNSException("GSQLBackend unable to insert a supermaster with IP " + ip + " and nameserver name '" + nameserver + "' and account '" + account + "': " + e.txtReason()); 
+  }
+  return true;
+
+}
+
 bool GSQLBackend::superMasterBackend(const string &ip, const DNSName &domain, const vector<DNSResourceRecord>&nsset, string *nameserver, string *account, DNSBackend **ddb)
 {
   // check if we know the ip/ns couple in the database
@@ -1234,15 +1268,20 @@ bool GSQLBackend::superMasterBackend(const string &ip, const DNSName &domain, co
   return false;
 }
 
-bool GSQLBackend::createDomain(const DNSName &domain, const string &type, const string &masters, const string &account)
+bool GSQLBackend::createDomain(const DNSName &domain, const DomainInfo::DomainKind kind, const vector<ComboAddress> &masters, const string &account)
 {
+  vector<string> masters_s;
+  for (const auto& master : masters) {
+    masters_s.push_back(master.toStringWithPortExcept(53));
+  }
+
   try {
     reconnectIfNeeded();
 
     d_InsertZoneQuery_stmt->
-      bind("type", type)->
+      bind("type", toUpper(DomainInfo::getKindString(kind)))->
       bind("domain", domain)->
-      bind("masters", masters)->
+      bind("masters", boost::join(masters_s, ", "))->
       bind("account", account)->
       execute()->
       reset();
@@ -1256,7 +1295,7 @@ bool GSQLBackend::createDomain(const DNSName &domain, const string &type, const 
 bool GSQLBackend::createSlaveDomain(const string &ip, const DNSName &domain, const string &nameserver, const string &account)
 {
   string name;
-  string masters(ip);
+  vector<ComboAddress> masters({ComboAddress(ip, 53)});
   try {
     if (!nameserver.empty()) {
       // figure out all IP addresses for the master
@@ -1270,16 +1309,16 @@ bool GSQLBackend::createSlaveDomain(const string &ip, const DNSName &domain, con
         reset();
       if (!d_result.empty()) {
         // collect all IP addresses
-        vector<string> tmp;
+        vector<ComboAddress> tmp;
         for(const auto& row: d_result) {
           if (account == row[1])
-            tmp.push_back(row[0]);
+            tmp.emplace_back(row[0], 53);
         }
         // set them as domain's masters, comma separated
-        masters = boost::join(tmp, ", ");
+        masters = tmp;
       }
     }
-    createDomain(domain, "SLAVE", masters, account);
+    createDomain(domain, DomainInfo::Slave, masters, account);
   }
   catch(SSqlException &e) {
     throw PDNSException("Database error trying to insert new slave domain '"+domain.toLogString()+"': "+ e.txtReason());
@@ -1370,9 +1409,11 @@ void GSQLBackend::getAllDomains(vector<DomainInfo> *domains, bool include_disabl
         }
       }
 
-      SOAData sd;
-      fillSOAData(row[2], sd);
-      di.serial = sd.serial;
+      if(!row[2].empty()) {
+        SOAData sd;
+        fillSOAData(row[2], sd);
+        di.serial = sd.serial;
+      }
       try {
         di.notified_serial = pdns_stou(row[5]);
         di.last_check = pdns_stou(row[6]);
@@ -1402,6 +1443,14 @@ bool GSQLBackend::replaceRRSet(uint32_t domain_id, const DNSName& qname, const Q
     }
 
     if (qt != QType::ANY) {
+      if (d_upgradeContent) {
+        d_DeleteRRSetQuery_stmt->
+          bind("domain_id", domain_id)->
+          bind("qname", qname)->
+          bind("qtype", "TYPE"+itoa(qt.getCode()))->
+          execute()->
+          reset();
+      }
       d_DeleteRRSetQuery_stmt->
         bind("domain_id", domain_id)->
         bind("qname", qname)->
@@ -1452,7 +1501,7 @@ bool GSQLBackend::feedRecord(const DNSResourceRecord &r, const DNSName &ordernam
       prio=pdns_stou(content.substr(0,pos));
       boost::erase_head(content, pos);
     }
-    trim_left(content);
+    boost::trim_left(content);
   }
 
   try {
@@ -1812,7 +1861,10 @@ void GSQLBackend::extractRecord(SSqlStatement::row_t& row, DNSResourceRecord& r)
 
   r.qtype=row[3];
 
-  if (r.qtype==QType::MX || r.qtype==QType::SRV) {
+  if (d_upgradeContent && DNSRecordContent::isUnknownType(row[3]) && r.qtype.isSupportedType()) {
+    r.content = DNSRecordContent::upgradeContent(r.qname, r.qtype, row[0]);
+  }
+  else if (r.qtype==QType::MX || r.qtype==QType::SRV) {
     r.content.reserve(row[2].size() + row[0].size() + 1);
     r.content=row[2]+" "+row[0];
   }

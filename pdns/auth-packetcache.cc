@@ -34,7 +34,7 @@ AuthPacketCache::AuthPacketCache(size_t mapsCount): d_maps(mapsCount), d_lastcle
 {
   S.declare("packetcache-hit", "Number of hits on the packet cache");
   S.declare("packetcache-miss", "Number of misses on the packet cache");
-  S.declare("packetcache-size", "Number of entries in the packet cache");
+  S.declare("packetcache-size", "Number of entries in the packet cache", StatType::gauge);
   S.declare("deferred-packetcache-inserts","Amount of packet cache inserts that were deferred because of maintenance");
   S.declare("deferred-packetcache-lookup","Amount of packet cache lookups that were deferred because of maintenance");
 
@@ -46,13 +46,11 @@ AuthPacketCache::AuthPacketCache(size_t mapsCount): d_maps(mapsCount), d_lastcle
 AuthPacketCache::~AuthPacketCache()
 {
   try {
-    vector<WriteLock*> locks;
+    vector<WriteLock> locks;
     for(auto& mc : d_maps) {
-      locks.push_back(new WriteLock(&mc.d_mut));
+      locks.push_back(WriteLock(mc.d_mut));
     }
-    for(auto wl : locks) {
-      delete wl;
-    }
+    locks.clear();
   }
   catch(...) {
   }
@@ -74,7 +72,7 @@ bool AuthPacketCache::get(DNSPacket& p, DNSPacket& cached)
 
   cleanupIfNeeded();
 
-  uint32_t hash = canHashPacket(p.getString());
+  uint32_t hash = canHashPacket(p.getString(), /* don't skip ECS */ false);
   p.setHash(hash);
 
   string value;
@@ -110,7 +108,8 @@ bool AuthPacketCache::get(DNSPacket& p, DNSPacket& cached)
 
 bool AuthPacketCache::entryMatches(cmap_t::index<HashTag>::type::iterator& iter, const std::string& query, const DNSName& qname, uint16_t qtype, bool tcp)
 {
-  return iter->tcp == tcp && iter->qtype == qtype && iter->qname == qname && queryMatches(iter->query, query, qname);
+  static const std::unordered_set<uint16_t> skippedEDNSTypes{ EDNSOptionCode::COOKIE };
+  return iter->tcp == tcp && iter->qtype == qtype && iter->qname == qname && queryMatches(iter->query, query, qname, skippedEDNSTypes);
 }
 
 void AuthPacketCache::insert(DNSPacket& q, DNSPacket& r, unsigned int maxTTL)
@@ -235,7 +234,7 @@ uint64_t AuthPacketCache::purge(const string &match)
 
   uint64_t delcount = 0;
 
-  if(ends_with(match, "$")) {
+  if(boost::ends_with(match, "$")) {
     delcount = purgeLockedCollectionsVector<NameTag>(d_maps, match);
     *d_statnumentries -= delcount;
   }

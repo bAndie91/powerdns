@@ -28,6 +28,8 @@
 
 #include <boost/accumulators/statistics.hpp>
 
+#include <thread>
+
 #include "dnsparser.hh"
 #include "sstuff.hh"
 #include "misc.hh"
@@ -51,7 +53,7 @@ unsigned int g_timeoutMsec;
 AtomicCounter g_networkErrors, g_otherErrors, g_OK, g_truncates, g_authAnswers, g_timeOuts;
 ComboAddress g_dest;
 
-unsigned int makeUsec(const struct timeval& tv)
+static unsigned int makeUsec(const struct timeval& tv)
 {
   return 1000000*tv.tv_sec + tv.tv_usec;
 }
@@ -69,7 +71,7 @@ struct BenchQuery
   time_t answerSecond;
 };
 
-void doQuery(BenchQuery* q)
+static void doQuery(BenchQuery* q)
 try
 {
   vector<uint8_t> packet;
@@ -172,7 +174,7 @@ AtomicCounter g_pos;
 
 vector<BenchQuery> g_queries;
 
-static void* worker(void*)
+static void worker()
 {
   setThreadName("dnstcpb/worker");
   for(;;) {
@@ -182,10 +184,9 @@ static void* worker(void*)
 
     doQuery(&g_queries[pos]); // this is safe as long as nobody *inserts* to g_queries
   }
-  return 0;
 }
 
-void usage(po::options_description &desc) {
+static void usage(po::options_description &desc) {
   cerr<<"Syntax: dnstcpbench REMOTE [PORT] < QUERIES"<<endl;
   cerr<<"Where QUERIES is one query per line, format: qname qtype, just 1 space"<<endl;
   cerr<<desc<<endl;
@@ -251,31 +252,33 @@ try
   }
 
 
-  std::vector<pthread_t> workers(numworkers);
+  std::vector<std::thread> workers;
+  workers.reserve(numworkers);
 
-  FILE* fp;
-  if(!g_vm.count("file"))
-    fp=fdopen(0, "r");
+  std::unique_ptr<FILE, int(*)(FILE*)> fp{nullptr, fclose};
+  if (!g_vm.count("file")) {
+    fp = std::unique_ptr<FILE, int(*)(FILE*)>(fdopen(0, "r"), fclose);
+  }
   else {
-    fp=fopen(g_vm["file"].as<string>().c_str(), "r");
-    if(!fp)
+    fp = std::unique_ptr<FILE, int(*)(FILE*)>(fopen(g_vm["file"].as<string>().c_str(), "r"), fclose);
+    if (!fp) {
       unixDie("Unable to open "+g_vm["file"].as<string>()+" for input");
+    }
   }
   pair<string, string> q;
   string line;
-  while(stringfgets(fp, line)) {
-    trim_right(line);
+  while(stringfgets(fp.get(), line)) {
+    boost::trim_right(line);
     q=splitField(line, ' ');
     g_queries.push_back(BenchQuery(q.first, DNSRecordContent::TypeToNumber(q.second)));
   }
-  fclose(fp);
-    
-  for(unsigned int n = 0; n < numworkers; ++n) {
-    pthread_create(&workers[n], 0, worker, 0);
+  fp.reset();
+
+  for (unsigned int n = 0; n < numworkers; ++n) {
+    workers.push_back(std::thread(worker));
   }
-  for(unsigned int n = 0; n < numworkers; ++n) {
-    void* status;
-    pthread_join(workers[n], &status);
+  for (auto& w : workers) {
+    w.join();
   }
   
   using namespace boost::accumulators;

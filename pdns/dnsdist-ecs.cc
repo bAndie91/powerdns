@@ -30,7 +30,9 @@
 /* when we add EDNS to a query, we don't want to advertise
    a large buffer size */
 size_t g_EdnsUDPPayloadSize = 512;
-uint16_t g_PayloadSizeSelfGenAnswers{s_udpIncomingBufferSize};
+static const uint16_t defaultPayloadSizeSelfGenAnswers = 1232;
+static_assert(defaultPayloadSizeSelfGenAnswers < s_udpIncomingBufferSize, "The UDP responder's payload size should be smaller or equal to our incoming buffer size");
+uint16_t g_PayloadSizeSelfGenAnswers{defaultPayloadSizeSelfGenAnswers};
 
 /* draft-ietf-dnsop-edns-client-subnet-04 "11.1.  Privacy" */
 uint16_t g_ECSSourcePrefixV4 = 24;
@@ -491,7 +493,7 @@ static bool replaceEDNSClientSubnetOption(char * const packet, const size_t pack
 
 /* This function looks for an OPT RR, return true if a valid one was found (even if there was no options)
    and false otherwise. */
-bool parseEDNSOptions(DNSQuestion& dq)
+bool parseEDNSOptions(const DNSQuestion& dq)
 {
   assert(dq.dh != nullptr);
   assert(dq.consumed <= dq.len);
@@ -503,7 +505,12 @@ bool parseEDNSOptions(DNSQuestion& dq)
 
   dq.ednsOptions = std::make_shared<std::map<uint16_t, EDNSOptionView> >();
 
-  if (ntohs(dq.dh->ancount) != 0 || ntohs(dq.dh->nscount) != 0 || (ntohs(dq.dh->arcount) != 0 && ntohs(dq.dh->arcount) != 1)) {
+  if (ntohs(dq.dh->arcount) == 0) {
+    /* nothing in additional so no EDNS */
+    return false;
+  }
+
+  if (ntohs(dq.dh->ancount) != 0 || ntohs(dq.dh->nscount) != 0 || ntohs(dq.dh->arcount) > 1) {
     return slowParseEDNSOptions(reinterpret_cast<const char*>(dq.dh), dq.len, dq.ednsOptions);
   }
 
@@ -940,7 +947,7 @@ bool setNegativeAndAdditionalSOA(DNSQuestion& dq, bool nxd, const DNSName& zone,
 
   dq.dh->arcount = htons(1);
 
-  if (g_addEDNSToSelfGeneratedResponses) {
+  if (hadEDNS) {
     /* now we need to add a new OPT record */
     return addEDNS(dq.dh, dq.len, dq.size, dnssecOK, g_PayloadSizeSelfGenAnswers, dq.ednsRCode);
   }

@@ -43,11 +43,13 @@
 #include <boost/iostreams/device/back_inserter.hpp>
 // #include <sstream>
 
+#include <stdio.h>
+#include <unistd.h>
 
 #include "lmdbbackend.hh"
 
-#define SCHEMAVERSION 2
-#define SCHEMAVERSION_TEXT "2"
+#define SCHEMAVERSION 3
+#define SCHEMAVERSION_TEXT "3"
 // List the class version here. Default is 0
 BOOST_CLASS_VERSION(LMDBBackend::KeyDataDB, 1)
 
@@ -101,6 +103,13 @@ LMDBBackend::LMDBBackend(const std::string& suffix)
     txn->put(pdnsdbi, "shards", d_shards);
   }
   txn->commit();
+
+  if (schemaversion < 3) {
+    if (!upgradeToSchemav3()) {
+      throw std::runtime_error("Failed to perform LMDB schema version upgrade to "+std::to_string(SCHEMAVERSION)+" from "+std::to_string(schemaversion));
+    }
+  }
+
   d_trecords.resize(d_shards);
   d_dolog = ::arg().mustDo("query-logging");
 }
@@ -219,30 +228,59 @@ std::string serToString(const DNSResourceRecord& rr)
 }
 
 template<>
-void serFromString(const string_view& str, DNSResourceRecord& rr)
+std::string serToString(const vector<DNSResourceRecord>& rrs)
+{
+  std::string ret;
+  for(const auto& rr: rrs) {
+    ret += serToString(rr);
+  }
+
+  return ret;
+}
+
+static inline size_t serOneRRFromString(const string_view& str, DNSResourceRecord& rr)
 {
   uint16_t len;
   memcpy(&len, &str[0], 2);
   rr.content.assign(&str[2], len);    // len bytes
   memcpy(&rr.ttl, &str[2] + len, 4);
-  rr.auth = str[str.size()-3];
-  rr.disabled = str[str.size()-1];
+  rr.auth = str[2 + len + 4];
+  rr.disabled = str[2 + len + 4 + 2];
   rr.wildcardname.clear();
+
+  return 2 + len + 7;
 }
 
-
-std::string serializeContent(uint16_t qtype, const DNSName& domain, const std::string& content)
+template<>
+void serFromString(const string_view& str, DNSResourceRecord& rr)
 {
-  auto drc = DNSRecordContent::mastermake(qtype, 1, content);
+  serOneRRFromString(str, rr);
+}
+
+template<>
+void serFromString(const string_view& str, vector<DNSResourceRecord>& rrs)
+{
+  auto str_copy = str;
+  while (str_copy.size() >= 9) { // minimum length for a record is 10
+    DNSResourceRecord rr;
+    auto rrLength = serOneRRFromString(str_copy, rr);
+    rrs.push_back(rr);
+    str_copy.remove_prefix(rrLength);
+  }
+}
+
+static std::string serializeContent(uint16_t qtype, const DNSName& domain, const std::string& content)
+{
+  auto drc = DNSRecordContent::mastermake(qtype, QClass::IN, content);
   return drc->serialize(domain, false);
 }
 
-std::shared_ptr<DNSRecordContent> unserializeContentZR(uint16_t qtype, const DNSName& qname, const std::string& content)
+static std::shared_ptr<DNSRecordContent> deserializeContentZR(uint16_t qtype, const DNSName& qname, const std::string& content)
 {
   if(qtype == QType::A && content.size() == 4) {
     return std::make_shared<ARecordContent>(*((uint32_t*)content.c_str()));
   }
-  return DNSRecordContent::unserialize(qname, qtype, content);
+  return DNSRecordContent::deserialize(qname, qtype, content);
 }
 
 
@@ -272,7 +310,7 @@ void LMDBBackend::deleteDomainRecords(RecordsRWTransaction& txn, uint32_t domain
   if(!cursor.lower_bound(match, key, val) ) {
     while(key.get<StringView>().rfind(match, 0) == 0) {
       if(qtype == QType::ANY || co.getQType(key.get<StringView>()) == qtype)
-        cursor.del(MDB_NODUPDATA);
+        cursor.del();
       if(cursor.next(key, val)) break;
     } 
   }
@@ -342,7 +380,17 @@ bool LMDBBackend::feedRecord(const DNSResourceRecord &r, const DNSName &ordernam
   rr.disabled = false;
 
   compoundOrdername co;
-  d_rwtxn->txn->put(d_rwtxn->db->dbi, co(r.domain_id, rr.qname, rr.qtype.getCode()), serToString(rr));
+  string matchName = co(r.domain_id, rr.qname, rr.qtype.getCode());
+
+  string rrs;
+  MDBOutVal _rrs;
+  if(!d_rwtxn->txn->get(d_rwtxn->db->dbi, matchName, _rrs)) {
+    rrs = _rrs.get<string>();
+  }
+  
+  rrs += serToString(rr);
+
+  d_rwtxn->txn->put(d_rwtxn->db->dbi, matchName, rrs);
 
   if(ordernameIsNSEC3 && !ordername.empty()) {
     MDBOutVal val;
@@ -437,15 +485,17 @@ bool LMDBBackend::replaceRRSet(uint32_t domain_id, const DNSName& qname, const Q
   MDBOutVal key, val;
   string match =co(domain_id, qname.makeRelative(di.zone), qt.getCode());
   if(!cursor.find(match, key, val)) {
-    do {
-      cursor.del(MDB_NODUPDATA);
-    } while(!cursor.next(key, val) && key.get<StringView>().rfind(match, 0) == 0);
+    cursor.del();
   }
 
-  for(auto rr : rrset) {
-    rr.content = serializeContent(rr.qtype.getCode(), rr.qname, rr.content);
-    rr.qname.makeUsRelative(di.zone);
-    txn->txn->put(txn->db->dbi, match, serToString(rr));
+  if(!rrset.empty()) {
+    vector<DNSResourceRecord> adjustedRRSet;
+    for(auto rr : rrset) {
+      rr.content = serializeContent(rr.qtype.getCode(), rr.qname, rr.content);
+      rr.qname.makeUsRelative(di.zone);
+      adjustedRRSet.push_back(rr);
+    }
+    txn->txn->put(txn->db->dbi, match, serToString(adjustedRRSet));
   }
 
   if(needCommit)
@@ -461,7 +511,7 @@ std::shared_ptr<LMDBBackend::RecordsRWTransaction> LMDBBackend::getRecordsRWTran
   if(!shard.env) {
     shard.env = getMDBEnv( (getArg("filename")+"-"+std::to_string(id % d_shards)).c_str(),
                            MDB_NOSUBDIR | d_asyncFlag, 0600);
-    shard.dbi = shard.env->openDB("records", MDB_CREATE | MDB_DUPSORT);
+    shard.dbi = shard.env->openDB("records", MDB_CREATE);
   }
   auto ret = std::make_shared<RecordsRWTransaction>(shard.env->getRWTransaction());
   ret->db = std::make_shared<RecordsDB>(shard);
@@ -478,7 +528,7 @@ std::shared_ptr<LMDBBackend::RecordsROTransaction> LMDBBackend::getRecordsROTran
     }
     shard.env = getMDBEnv( (getArg("filename")+"-"+std::to_string(id % d_shards)).c_str(),
                            MDB_NOSUBDIR | d_asyncFlag, 0600);
-    shard.dbi = shard.env->openDB("records", MDB_CREATE | MDB_DUPSORT);
+    shard.dbi = shard.env->openDB("records", MDB_CREATE);
   }
   
   if (rwtxn) {
@@ -492,6 +542,65 @@ std::shared_ptr<LMDBBackend::RecordsROTransaction> LMDBBackend::getRecordsROTran
   }
 }
 
+bool LMDBBackend::upgradeToSchemav3()
+{
+  for(auto i = 0; i < d_shards; i++) {
+    string filename = getArg("filename")+"-"+std::to_string(i);
+    if (rename(filename.c_str(), (filename+"-old").c_str()) < 0) {
+        if (errno == ENOENT) {
+            // apparently this shard doesn't exist yet, moving on
+            continue;
+        }
+        unixDie("Rename failed during LMDB upgrade");
+    }
+
+    LMDBBackend::RecordsDB oldShard, newShard;
+
+    oldShard.env = getMDBEnv( (filename+"-old").c_str(),
+                           MDB_NOSUBDIR | d_asyncFlag, 0600);
+    oldShard.dbi = oldShard.env->openDB("records", MDB_CREATE | MDB_DUPSORT);
+    auto txn =  oldShard.env->getROTransaction();
+    auto cursor = txn->getROCursor(oldShard.dbi);
+
+    newShard.env = getMDBEnv( (filename).c_str(),
+                           MDB_NOSUBDIR | d_asyncFlag, 0600);
+    newShard.dbi = newShard.env->openDB("records", MDB_CREATE);
+    auto newTxn =  newShard.env->getRWTransaction();
+
+    MDBOutVal key, val;
+    if (cursor.first(key, val) != 0) {
+      cursor.close();
+      txn->abort();
+      newTxn->abort();
+      continue;
+    }
+    string_view currentKey;
+    string value;
+    for(;;) {
+      auto newKey = key.get<string_view>();
+      if (currentKey.compare(newKey) != 0) {
+        if (value.size() > 0) {
+          newTxn->put(newShard.dbi, currentKey, value);
+        }
+        currentKey = newKey;
+        value = "";
+      }
+      value += val.get<string>();
+      if (cursor.next(key, val) != 0){
+        if (value.size() > 0) {
+          newTxn->put(newShard.dbi, currentKey, value);
+        }
+        break;
+      }
+    }
+
+    cursor.close();
+    txn->commit();
+    newTxn->commit();
+  }
+
+  return true;
+}
 
 bool LMDBBackend::deleteDomain(const DNSName &domain)
 {
@@ -523,7 +632,7 @@ bool LMDBBackend::deleteDomain(const DNSName &domain)
   MDBOutVal key, val;
   if(!cursor.find(match, key, val)) {
     do {
-      cursor.del(MDB_NODUPDATA);
+      cursor.del();
     } while(!cursor.next(key, val) && key.get<StringView>().rfind(match, 0) == 0);
   }
 
@@ -561,6 +670,11 @@ bool LMDBBackend::list(const DNSName &target, int id, bool include_disabled)
   }
 
   d_lookupdomain = target;
+
+  // Make sure we start with fresh data
+  d_currentrrset.clear();
+  d_currentrrsetpos = 0;
+
   return true;
 }
 
@@ -595,7 +709,7 @@ void LMDBBackend::lookup(const QType &type, const DNSName &qdomain, int zoneId, 
   }
     
   DNSName relqname = qdomain.makeRelative(hunt);
-  //  cout<<"get will look for "<<relqname<< " in zone "<<hunt<<" with id "<<zoneId<<endl;
+  // cout<<"get will look for "<<relqname<< " in zone "<<hunt<<" with id "<<zoneId<<" and type "<<type.getName()<<endl;
   d_rotxn = getRecordsROTransaction(zoneId, d_rwtxn);
 
   compoundOrdername co;
@@ -621,6 +735,10 @@ void LMDBBackend::lookup(const QType &type, const DNSName &qdomain, int zoneId, 
   }
 
   d_lookupdomain = hunt;
+
+  // Make sure we start with fresh data
+  d_currentrrset.clear();
+  d_currentrrsetpos = 0;
 }
 
 
@@ -632,32 +750,42 @@ bool LMDBBackend::get(DNSZoneRecord& rr)
       return false;
     }
 
-    MDBOutVal keyv, val;
-    d_getcursor->current(keyv, val);
+    string_view key;
 
-    DNSResourceRecord drr;
-    serFromString(val.get<string>(), drr);
+    if (d_currentrrset.empty()) {
+      d_getcursor->current(d_currentKey, d_currentVal);
 
-    auto key = keyv.get<string_view>();
-    rr.dr.d_type = compoundOrdername::getQType(key).getCode();
+      key = d_currentKey.get<string_view>();
+      rr.dr.d_type = compoundOrdername::getQType(key).getCode();
 
-    if(rr.dr.d_type == QType::NSEC3) {
-      // Hit a magic NSEC3 skipping
-      if(d_getcursor->next(keyv, val) || keyv.get<StringView>().rfind(d_matchkey, 0) != 0) {
-        d_getcursor.reset();
+      if(rr.dr.d_type == QType::NSEC3) {
+        // Hit a magic NSEC3 skipping
+        if(d_getcursor->next(d_currentKey, d_currentVal) || d_currentKey.get<StringView>().rfind(d_matchkey, 0) != 0) {
+          d_getcursor.reset();
+        }
+        continue;
       }
 
-      continue;
+      serFromString(d_currentVal.get<string>(), d_currentrrset);
+      d_currentrrsetpos = 0;
+    } else {
+      key = d_currentKey.get<string_view>();
     }
+
+    const auto& drr = d_currentrrset.at(d_currentrrsetpos++);
 
     rr.dr.d_name = compoundOrdername::getQName(key) + d_lookupdomain;
     rr.domain_id = compoundOrdername::getDomainID(key);
+    rr.dr.d_type = compoundOrdername::getQType(key).getCode();
     rr.dr.d_ttl = drr.ttl;
-    rr.dr.d_content = unserializeContentZR(rr.dr.d_type, rr.dr.d_name, drr.content);
+    rr.dr.d_content = deserializeContentZR(rr.dr.d_type, rr.dr.d_name, drr.content);
     rr.auth = drr.auth;
 
-    if(d_getcursor->next(keyv, val) || keyv.get<StringView>().rfind(d_matchkey, 0) != 0) {
-      d_getcursor.reset();
+    if(d_currentrrsetpos >= d_currentrrset.size()) {
+      d_currentrrset.clear();
+      if(d_getcursor->next(d_currentKey, d_currentVal) || d_currentKey.get<StringView>().rfind(d_matchkey, 0) != 0) {
+        d_getcursor.reset();
+      }
     }
 
     break;
@@ -692,6 +820,25 @@ bool LMDBBackend::getDomainInfo(const DNSName &domain, DomainInfo &di, bool getS
   if(!(di.id=txn.get<0>(domain, di)))
     return false;
   di.backend = this;
+
+  di.serial = 0;
+
+  if(getSerial) {
+    auto txn2 = getRecordsROTransaction(di.id);
+    compoundOrdername co;
+    MDBOutVal val;
+
+    if(!txn2->txn->get(txn2->db->dbi, co(di.id, g_rootdnsname, QType::SOA), val)) {
+      DNSResourceRecord rr;
+      serFromString(val.get<string_view>(), rr);
+
+      if(rr.content.size() >= 5 * sizeof(uint32_t)) {
+        uint32_t serial = *reinterpret_cast<uint32_t*>(&rr.content[rr.content.size() - (5 * sizeof(uint32_t))]);
+        di.serial = ntohl(serial);
+      }
+    }
+  }
+
   return true;
 }
 
@@ -758,25 +905,14 @@ void LMDBBackend::setNotified(uint32_t domain_id, uint32_t serial)
 }
 
 
-bool LMDBBackend::setMaster(const DNSName &domain, const std::string& ips)
+bool LMDBBackend::setMasters(const DNSName &domain, const vector<ComboAddress> &masters)
 {
-  vector<ComboAddress> masters;
-  vector<string> parts;
-  stringtok(parts, ips, " \t;,");
-  for(const auto& ip : parts) 
-    masters.push_back(ComboAddress(ip, 53));
-  
   return genChangeDomain(domain, [&masters](DomainInfo& di) {
       di.masters = masters;
     });
 }
 
-bool LMDBBackend::createDomain(const DNSName &domain)
-{
-  return createDomain(domain, "NATIVE", "", "");
-}
-          
-bool LMDBBackend::createDomain(const DNSName &domain, const string &type, const string &masters, const string &account)
+bool LMDBBackend::createDomain(const DNSName &domain, const DomainInfo::DomainKind kind, const vector<ComboAddress> &masters, const string &account)
 {
   DomainInfo di;
 
@@ -784,16 +920,10 @@ bool LMDBBackend::createDomain(const DNSName &domain, const string &type, const 
   if(txn.get<0>(domain, di)) {
     throw DBException("Domain '"+domain.toLogString()+"' exists already");
   }
-  
+
   di.zone = domain;
-  if(pdns_iequals(type, "master"))
-    di.kind = DomainInfo::Master;
-  else if(pdns_iequals(type, "slave"))
-    di.kind = DomainInfo::Slave;
-  else if(pdns_iequals(type, "native"))
-    di.kind = DomainInfo::Native;
-  else
-    throw DBException("Unable to create domain of unknown type '"+type+"'");
+  di.kind = kind;
+  di.masters = masters;
   di.account = account;
 
   txn.put(di);
@@ -824,6 +954,7 @@ void LMDBBackend::getAllDomains(vector<DomainInfo> *domains, bool include_disabl
     } else if(!include_disabled) {
       continue;
     }
+    di.backend = this;
     domains->push_back(di);
   }
 }
@@ -863,6 +994,7 @@ void LMDBBackend::getUnfreshSlaveInfos(vector<DomainInfo>* domains)
     DomainInfo di=*iter;    
     di.id = iter.getID();
     di.serial = serial;
+    di.backend = this;
 
     domains->push_back(di);
   }
@@ -1394,20 +1526,29 @@ bool LMDBBackend::updateDNSSECOrderNameAndAuth(uint32_t domain_id, const DNSName
   bool needNSEC3 = hasOrderName;
 
   for(; key.get<StringView>().rfind(matchkey,0) == 0; ) {
-    DNSResourceRecord rr;
-    rr.qtype = co.getQType(key.get<StringView>());
+    vector<DNSResourceRecord> rrs;
 
-    if(rr.qtype != QType::NSEC3) {
-      serFromString(val.get<StringView>(), rr);
-      if(!needNSEC3 && qtype != QType::ANY) {
-        needNSEC3 = (rr.disabled && QType(qtype) != rr.qtype);
+    if(co.getQType(key.get<StringView>()) != QType::NSEC3) {
+      serFromString(val.get<StringView>(), rrs);
+      bool changed = false;
+      vector<DNSResourceRecord> newRRs;
+      for(auto rr: rrs) {
+        rr.qtype = co.getQType(key.get<StringView>());
+        if(!needNSEC3 && qtype != QType::ANY) {
+          needNSEC3 = (rr.disabled && QType(qtype) != rr.qtype);
+        }
+
+        if((qtype == QType::ANY || QType(qtype) == rr.qtype) && (rr.disabled != hasOrderName || rr.auth != auth)) {
+          rr.auth = auth;
+          rr.disabled = hasOrderName;
+          changed = true;
+
+          string repl = serToString(rr);
+        }
+        newRRs.push_back(rr);
       }
-
-      if((qtype == QType::ANY || QType(qtype) == rr.qtype) && (rr.disabled != hasOrderName || rr.auth != auth)) {
-        rr.auth = auth;
-        rr.disabled = hasOrderName;
-        string repl = serToString(rr);
-        cursor.put(key, repl);
+      if (changed) {
+        cursor.put(key, serToString(newRRs));
       }
     }
 
@@ -1575,7 +1716,7 @@ class LMDBFactory : public BackendFactory
 {
 public:
   LMDBFactory() : BackendFactory("lmdb") {}
-  void declareArguments(const string &suffix="")
+  void declareArguments(const string &suffix="") override
   {
     declare(suffix,"filename","Filename for lmdb","./pdns.lmdb");
     declare(suffix,"sync-mode","Synchronisation mode: nosync, nometasync, mapasync, sync","mapasync");
@@ -1583,7 +1724,7 @@ public:
     declare(suffix,"shards","Records database will be split into this number of shards", (sizeof(long) == 4) ? "2" : "64");
     declare(suffix,"schema-version","Maximum allowed schema version to run on this DB. If a lower version is found, auto update is performed", SCHEMAVERSION_TEXT); 
   }
-  DNSBackend *make(const string &suffix="")
+  DNSBackend *make(const string &suffix="") override
   {
     return new LMDBBackend(suffix);
   }

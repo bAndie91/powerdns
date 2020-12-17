@@ -50,12 +50,14 @@
 extern StatBag S;
 
 vector<UeberBackend *>UeberBackend::instances;
-pthread_mutex_t UeberBackend::instances_lock=PTHREAD_MUTEX_INITIALIZER;
+std::mutex UeberBackend::instances_lock;
 
 // initially we are blocked
 bool UeberBackend::d_go=false;
-pthread_mutex_t  UeberBackend::d_mut = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t UeberBackend::d_cond = PTHREAD_COND_INITIALIZER;
+bool UeberBackend::s_doANYLookupsOnly=false;
+std::mutex UeberBackend::d_mut;
+std::condition_variable UeberBackend::d_cond;
+AtomicCounter* UeberBackend::s_backendQueries = nullptr;
 
 //! Loads a module and reports it to all UeberBackend threads
 bool UeberBackend::loadmodule(const string &name)
@@ -94,10 +96,18 @@ bool UeberBackend::loadModules(const vector<string>& modules, const string& path
 
 void UeberBackend::go(void)
 {
-  pthread_mutex_lock(&d_mut);
-  d_go=true;
-  pthread_cond_broadcast(&d_cond);
-  pthread_mutex_unlock(&d_mut);
+  if (::arg().mustDo("consistent-backends")) {
+    s_doANYLookupsOnly = true;
+  }
+
+  S.declare("backend-queries", "Number of queries sent to the backend(s)");
+  s_backendQueries = S.getPointer("backend-queries");
+
+  {
+    std::unique_lock<std::mutex> l(d_mut);
+    d_go = true;
+  }
+  d_cond.notify_all();
 }
 
 bool UeberBackend::getDomainInfo(const DNSName &domain, DomainInfo &di, bool getSerial)
@@ -108,10 +118,10 @@ bool UeberBackend::getDomainInfo(const DNSName &domain, DomainInfo &di, bool get
   return false;
 }
 
-bool UeberBackend::createDomain(const DNSName &domain)
+bool UeberBackend::createDomain(const DNSName &domain, const DomainInfo::DomainKind kind, const vector<ComboAddress> &masters, const string &account)
 {
   for(DNSBackend* mydb :  backends) {
-    if(mydb->createDomain(domain)) {
+    if(mydb->createDomain(domain, kind, masters, account)) {
       return true;
     }
   }
@@ -309,11 +319,12 @@ bool UeberBackend::getAuth(const DNSName &target, const QType& qtype, SOAData* s
   vector<pair<size_t, SOAData> > bestmatch (backends.size(), make_pair(target.wirelength()+1, SOAData()));
   do {
 
+    d_question.qtype = QType::SOA;
+    d_question.qname = shorter;
+    d_question.zoneId = -1;
+
     // Check cache
     if(cachedOk && (d_cache_ttl || d_negcache_ttl)) {
-      d_question.qtype = QType::SOA;
-      d_question.qname = shorter;
-      d_question.zoneId = -1;
 
       cstat = cacheHas(d_question,d_answers);
 
@@ -321,7 +332,11 @@ bool UeberBackend::getAuth(const DNSName &target, const QType& qtype, SOAData* s
         DLOG(g_log<<Logger::Error<<"has pos cache entry: "<<shorter<<endl);
         fillSOAData(d_answers[0], *sd);
 
-        sd->db = 0;
+        if (backends.size() == 1) {
+          sd->db = *backends.begin();
+        } else {
+          sd->db = nullptr;
+        }
         sd->qname = shorter;
         goto found;
       } else if(cstat == 0 && d_negcache_ttl) {
@@ -401,28 +416,6 @@ found:
   return found;
 }
 
-bool UeberBackend::getSOA(const DNSName &domain, SOAData &sd)
-{
-  d_question.qtype=QType::SOA;
-  d_question.qname=domain;
-  d_question.zoneId=-1;
-    
-  int cstat=cacheHas(d_question,d_answers);
-  if(cstat==0) { // negative
-    return false;
-  }
-  else if(cstat==1 && !d_answers.empty()) {
-    fillSOAData(d_answers[0],sd);
-    sd.domain_id=d_answers[0].domain_id;
-    sd.ttl=d_answers[0].dr.d_ttl;
-    sd.db=0;
-    return true;
-  }
-
-  // not found in neg. or pos. cache, look it up
-  return getSOAUncached(domain, sd);
-}
-
 bool UeberBackend::getSOAUncached(const DNSName &domain, SOAData &sd)
 {
   d_question.qtype=QType::SOA;
@@ -453,6 +446,14 @@ bool UeberBackend::getSOAUncached(const DNSName &domain, SOAData &sd)
   return false;
 }
 
+bool UeberBackend::superMasterAdd(const string &ip, const string &nameserver, const string &account) 
+{
+  for(vector<DNSBackend *>::const_iterator i=backends.begin();i!=backends.end();++i)
+    if((*i)->superMasterAdd(ip, nameserver, account)) 
+      return true;
+  return false;
+}
+
 bool UeberBackend::superMasterBackend(const string &ip, const DNSName &domain, const vector<DNSResourceRecord>&nsset, string *nameserver, string *account, DNSBackend **db)
 {
   for(vector<DNSBackend *>::const_iterator i=backends.begin();i!=backends.end();++i)
@@ -463,36 +464,33 @@ bool UeberBackend::superMasterBackend(const string &ip, const DNSName &domain, c
 
 UeberBackend::UeberBackend(const string &pname)
 {
-  pthread_mutex_lock(&instances_lock);
-  instances.push_back(this); // report to the static list of ourself
-  pthread_mutex_unlock(&instances_lock);
+  {
+    std::lock_guard<std::mutex> l(instances_lock);
+    instances.push_back(this); // report to the static list of ourself
+  }
 
   d_negcached=0;
-  d_ancount=0;
-  d_domain_id=-1;
   d_cached=0;
   d_cache_ttl = ::arg().asNum("query-cache-ttl");
   d_negcache_ttl = ::arg().asNum("negquery-cache-ttl");
-
-  d_tid=pthread_self();
-  d_stale=false;
+  d_qtype = 0;
+  d_stale = false;
 
   backends=BackendMakers().all(pname=="key-only");
 }
 
-void del(DNSBackend* d)
+static void del(DNSBackend* d)
 {
   delete d;
 }
 
 void UeberBackend::cleanup()
 {
-  pthread_mutex_lock(&instances_lock);
-
-  remove(instances.begin(),instances.end(),this);
-  instances.resize(instances.size()-1);
-
-  pthread_mutex_unlock(&instances_lock);
+  {
+    std::lock_guard<std::mutex> l(instances_lock);
+    remove(instances.begin(),instances.end(),this);
+    instances.resize(instances.size()-1);
+  }
 
   for_each(backends.begin(),backends.end(),del);
 }
@@ -567,23 +565,20 @@ void UeberBackend::lookup(const QType &qtype,const DNSName &qname, int zoneId, D
   }
 
   DLOG(g_log<<"UeberBackend received question for "<<qtype.getName()<<" of "<<qname<<endl);
-  if(!d_go) {
-    pthread_mutex_lock(&d_mut);
-    while (d_go==false) {
-      g_log<<Logger::Error<<"UeberBackend is blocked, waiting for 'go'"<<endl;
-      pthread_cond_wait(&d_cond, &d_mut);
-      g_log<<Logger::Error<<"Broadcast received, unblocked"<<endl;
-    }
-    pthread_mutex_unlock(&d_mut);
+  if (!d_go) {
+    g_log<<Logger::Error<<"UeberBackend is blocked, waiting for 'go'"<<endl;
+    std::unique_lock<std::mutex> l(d_mut);
+    d_cond.wait(l, []{ return d_go == true; });
+    g_log<<Logger::Error<<"Broadcast received, unblocked"<<endl;
   }
 
-  d_domain_id=zoneId;
+  d_qtype=qtype.getCode();
 
   d_handle.i=0;
-  d_handle.qtype=qtype;
+  d_handle.qtype=s_doANYLookupsOnly ? QType::ANY : qtype;
   d_handle.qname=qname;
+  d_handle.zoneId=zoneId;
   d_handle.pkt_p=pkt_p;
-  d_ancount=0;
 
   if(!backends.size()) {
     g_log<<Logger::Error<<"No database backends available - unable to answer questions."<<endl;
@@ -591,15 +586,17 @@ void UeberBackend::lookup(const QType &qtype,const DNSName &qname, int zoneId, D
     throw PDNSException("We are stale, please recycle");
   }
   else {
-    d_question.qtype=qtype;
+    d_question.qtype=d_handle.qtype;
     d_question.qname=qname;
-    d_question.zoneId=zoneId;
+    d_question.zoneId=d_handle.zoneId;
+
     int cstat=cacheHas(d_question, d_answers);
     if(cstat<0) { // nothing
       //      cout<<"UeberBackend::lookup("<<qname<<"|"<<DNSRecordContent::NumberToType(qtype.getCode())<<"): uncached"<<endl;
       d_negcached=d_cached=false;
       d_answers.clear(); 
-      (d_handle.d_hinterBackend=backends[d_handle.i++])->lookup(qtype, qname,zoneId,pkt_p);
+      (d_handle.d_hinterBackend=backends[d_handle.i++])->lookup(d_handle.qtype, d_handle.qname, d_handle.zoneId, d_handle.pkt_p);
+      ++(*s_backendQueries);
     } 
     else if(cstat==0) {
       //      cout<<"UeberBackend::lookup("<<qname<<"|"<<DNSRecordContent::NumberToType(qtype.getCode())<<"): NEGcached"<<endl;
@@ -633,31 +630,34 @@ bool UeberBackend::get(DNSZoneRecord &rr)
   }
 
   if(d_cached) {
-    if(d_cachehandleiter != d_answers.end()) {
+    while(d_cachehandleiter != d_answers.end()) {
       rr=*d_cachehandleiter++;;
+      if((d_qtype == QType::ANY || rr.dr.d_type == d_qtype)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  while(d_handle.get(rr)) {
+    rr.dr.d_place=DNSResourceRecord::ANSWER;
+    d_answers.push_back(rr);
+    if((d_qtype == QType::ANY || rr.dr.d_type == d_qtype)) {
       return true;
     }
-    return false;
-  }
-  if(!d_handle.get(rr)) {
-    // cout<<"end of ueberbackend get, seeing if we should cache"<<endl;
-    if(!d_ancount && d_handle.qname.countLabels()) {// don't cache axfr
-      // cout<<"adding negcache"<<endl;
-      addNegCache(d_question);
-    }
-    else {
-      // cout<<"adding query cache"<<endl;
-      addCache(d_question, std::move(d_answers));
-    }
-    d_answers.clear();
-    return false;
   }
 
-  rr.dr.d_place=DNSResourceRecord::ANSWER;
-
-  d_ancount++;
-  d_answers.push_back(rr);
-  return true;
+  // cout<<"end of ueberbackend get, seeing if we should cache"<<endl;
+  if(d_answers.empty()) {
+    // cout<<"adding negcache"<<endl;
+    addNegCache(d_question);
+  }
+  else {
+    // cout<<"adding query cache"<<endl;
+    addCache(d_question, std::move(d_answers));
+  }
+  d_answers.clear();
+  return false;
 }
 
 bool UeberBackend::searchRecords(const string& pattern, int maxResults, vector<DNSResourceRecord>& result)
@@ -686,6 +686,7 @@ UeberBackend::handle::handle()
   d_hinterBackend=NULL;
   pkt_p=NULL;
   i=0;
+  zoneId = -1;
 }
 
 UeberBackend::handle::~handle()
@@ -703,7 +704,8 @@ bool UeberBackend::handle::get(DNSZoneRecord &r)
            <<" out of answers, taking next"<<endl);
       
       d_hinterBackend=parent->backends[i++];
-      d_hinterBackend->lookup(qtype,qname,parent->d_domain_id,pkt_p);
+      d_hinterBackend->lookup(qtype,qname,zoneId,pkt_p);
+      ++(*s_backendQueries);
     }
     else 
       break;

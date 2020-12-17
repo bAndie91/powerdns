@@ -92,10 +92,10 @@ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_pthread_set_name.m4 \
 	$(top_srcdir)/m4/ax_arg_default_enable_disable.m4 \
 	$(top_srcdir)/m4/ax_cxx_compile_stdcxx_11.m4 \
-	$(top_srcdir)/m4/boost.m4 $(top_srcdir)/m4/libcurl.m4 \
-	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
-	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 \
+	$(top_srcdir)/m4/ax_python_module.m4 $(top_srcdir)/m4/boost.m4 \
+	$(top_srcdir)/m4/libcurl.m4 $(top_srcdir)/m4/libtool.m4 \
+	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
+	$(top_srcdir)/m4/ltversion.m4 $(top_srcdir)/m4/lt~obsolete.m4 \
 	$(top_srcdir)/m4/pdns_check_bison.m4 \
 	$(top_srcdir)/m4/pdns_check_cdb.m4 \
 	$(top_srcdir)/m4/pdns_check_clock_gettime.m4 \
@@ -110,14 +110,13 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_pthread_set_name.m4 \
 	$(top_srcdir)/m4/pdns_check_lua_hpp.m4 \
 	$(top_srcdir)/m4/pdns_check_network_libs.m4 \
 	$(top_srcdir)/m4/pdns_check_os.m4 \
+	$(top_srcdir)/m4/pdns_check_python_venv.m4 \
 	$(top_srcdir)/m4/pdns_check_ragel.m4 \
 	$(top_srcdir)/m4/pdns_check_sqlite3.m4 \
-	$(top_srcdir)/m4/pdns_check_virtualenv.m4 \
 	$(top_srcdir)/m4/pdns_d_fortify_source.m4 \
 	$(top_srcdir)/m4/pdns_enable_backend_unit_tests.m4 \
 	$(top_srcdir)/m4/pdns_enable_coverage.m4 \
 	$(top_srcdir)/m4/pdns_enable_fuzz_targets.m4 \
-	$(top_srcdir)/m4/pdns_enable_gss_tsig.m4 \
 	$(top_srcdir)/m4/pdns_enable_ixfrdist.m4 \
 	$(top_srcdir)/m4/pdns_enable_kiss.m4 \
 	$(top_srcdir)/m4/pdns_enable_malloc_trace.m4 \
@@ -282,9 +281,6 @@ FGREP = @FGREP@
 GEOIP_CFLAGS = @GEOIP_CFLAGS@
 GEOIP_LIBS = @GEOIP_LIBS@
 GREP = @GREP@
-GSS_CFLAGS = @GSS_CFLAGS@
-GSS_LIBS = @GSS_LIBS@
-GSS_TSIG = @GSS_TSIG@
 HAVE_CXX11 = @HAVE_CXX11@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
@@ -359,6 +355,11 @@ PROGRAM_LDFLAGS = @PROGRAM_LDFLAGS@
 PROTOBUF_CFLAGS = @PROTOBUF_CFLAGS@
 PROTOBUF_LIBS = @PROTOBUF_LIBS@
 PROTOC = @PROTOC@
+PYTHON = @PYTHON@
+PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
+PYTHON_PLATFORM = @PYTHON_PLATFORM@
+PYTHON_PREFIX = @PYTHON_PREFIX@
+PYTHON_VERSION = @PYTHON_VERSION@
 RAGEL = @RAGEL@
 RANLIB = @RANLIB@
 RELRO_LDFLAGS = @RELRO_LDFLAGS@
@@ -381,7 +382,6 @@ UNIXODBC_CFLAGS = @UNIXODBC_CFLAGS@
 UNIXODBC_LIBS = @UNIXODBC_LIBS@
 UNIXODBC_config = @UNIXODBC_config@
 VERSION = @VERSION@
-VIRTUALENV = @VIRTUALENV@
 WARN_CFLAGS = @WARN_CFLAGS@
 YACC = @YACC@
 YAHTTP_CFLAGS = @YAHTTP_CFLAGS@
@@ -436,9 +436,13 @@ moduleobjects = @moduleobjects@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 pdns_configure_args = @pdns_configure_args@
+pkgpyexecdir = @pkgpyexecdir@
+pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+pyexecdir = @pyexecdir@
+pythondir = @pythondir@
 runstatedir = @runstatedir@
 sbindir = @sbindir@
 service_group = @service_group@

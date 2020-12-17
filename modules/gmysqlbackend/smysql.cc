@@ -65,7 +65,7 @@ private:
 static thread_local MySQLThreadCloser threadcloser;
 
 bool SMySQL::s_dolog;
-pthread_mutex_t SMySQL::s_myinitlock = PTHREAD_MUTEX_INITIALIZER;
+std::mutex SMySQL::s_myinitlock;
 
 class SMySQLStatement: public SSqlStatement
 {
@@ -443,7 +443,7 @@ void SMySQL::connect()
 {
   int retry=1;
 
-  Lock l(&s_myinitlock);
+  std::lock_guard<std::mutex> l(s_myinitlock);
   if (d_threadCleanup) {
     threadcloser.enable();
   }
@@ -463,10 +463,6 @@ void SMySQL::connect()
       mysql_options(&d_db, MYSQL_OPT_READ_TIMEOUT, &d_timeout);
       mysql_options(&d_db, MYSQL_OPT_WRITE_TIMEOUT, &d_timeout);
     }
-#endif
-
-#if MYSQL_VERSION_ID >= 50500
-    mysql_options(&d_db, MYSQL_SET_CHARSET_NAME, MYSQL_AUTODETECT_CHARSET_NAME);
 #endif
 
     if (d_setIsolation && (retry == 1))
@@ -514,7 +510,7 @@ SMySQL::~SMySQL()
 
 SSqlException SMySQL::sPerrorException(const string &reason)
 {
-  return SSqlException(reason+string(": ")+mysql_error(&d_db));
+  return SSqlException(reason+string(": ERROR ")+std::to_string(mysql_errno(&d_db))+" ("+string(mysql_sqlstate(&d_db))+"): "+mysql_error(&d_db));
 }
 
 std::unique_ptr<SSqlStatement> SMySQL::prepare(const string& query, int nparams)

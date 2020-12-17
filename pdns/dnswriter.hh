@@ -27,6 +27,7 @@
 #include "dnsname.hh"
 #include "namespaces.hh"
 #include "iputils.hh"
+#include "svc-records.hh"
 #include <arpa/inet.h>
 
 
@@ -129,6 +130,7 @@ public:
   void xfrText(const string& text, bool multi=false, bool lenField=true);
   void xfrUnquotedText(const string& text, bool lenField);
   void xfrBlob(const string& blob, int len=-1);
+  void xfrSvcParamKeyVals(const set<SvcParam>& kvs);
   void xfrBlobNoSpaces(const string& blob, int len=-1);
   void xfrHexBlob(const string& blob, bool keepReading=false);
 
@@ -156,7 +158,7 @@ public:
 private:
   uint16_t lookupName(const DNSName& name, uint16_t* matchlen);
   vector<uint16_t> d_namepositions;
-  // We declare 1 uint_16 in the public section, these 3 align on a 8-byte boundry
+  // We declare 1 uint_16 in the public section, these 3 align on a 8-byte boundary
   uint16_t d_sor;
   uint16_t d_rollbackmarker; // start of last complete packet, for rollback
 
