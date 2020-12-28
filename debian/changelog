@@ -1,3 +1,13 @@
+pdns (4.4.0-2) unstable; urgency=medium
+
+  * ixfrdist: comment out default values
+  * Update example config files for shipped backends
+  * d/copyright: update
+  * d/README.source: update, note upstream alignment
+  * Add patch for future gcc-11 build failure
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Mon, 28 Dec 2020 02:12:28 +0000
+
 pdns (4.4.0-1) unstable; urgency=medium
 
   * New upstream version 4.4.0 (Closes: #975590)
