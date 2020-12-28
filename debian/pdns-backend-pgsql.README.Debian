@@ -19,8 +19,8 @@ PowerDNS is provided in /usr/share/doc/pdns-backend-pgsql/examples/.
 It is probably a good idea to protect your configuration file, as
 it will contain your database password:
 
-   chmod 0640 /etc/powerdns/pdns.d/pdns.local.gpgsql.conf
-   chgrp pdns /etc/powerdns/pdns.d/pdns.local.gpgsql.conf
+   chmod 0640 /etc/powerdns/pdns.d/gpgsql.conf
+   chgrp pdns /etc/powerdns/pdns.d/gpgsql.conf
 
 Note: in previous versions, the Debian packages used
 dbconfig-common, and you can continue to use dbconfig
