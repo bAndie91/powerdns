@@ -1,3 +1,9 @@
+pdns (4.4.0-3) unstable; urgency=medium
+
+  * Build new pdns-backend-{lua2,lmdb} packages
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Tue, 05 Jan 2021 09:08:55 +0000
+
 pdns (4.4.0-2) unstable; urgency=medium
 
   * ixfrdist: comment out default values
