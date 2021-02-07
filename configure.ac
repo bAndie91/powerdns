@@ -1,6 +1,6 @@
 AC_PREREQ([2.61])
 
-AC_INIT([pdns], [4.4.0])
+AC_INIT([pdns], [4.4.1])
 
 AC_CONFIG_SRCDIR([pdns/receiver.cc])
 AC_CONFIG_MACRO_DIR([m4])
