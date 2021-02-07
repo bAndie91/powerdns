@@ -1,3 +1,17 @@
+pdns (4.4.1-1) unstable; urgency=medium
+
+  * New upstream version 4.4.1 with important bugfixes
+    * Drop upstream-applied patches
+  * pdns-backend-odbc: remove duplicate schema file
+  * Use Lua 5.3 again on platforms not having luajit
+  * Remove outdated comment about make test
+  * supported-algos test: add ED448
+  * Enable PKCS11
+  * I have re-synced our and upstreams packaging, so they are now
+    as similar as possible.
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Sun, 07 Feb 2021 15:01:51 +0000
+
 pdns (4.4.0-3) unstable; urgency=medium
 
   * Build new pdns-backend-{lua2,lmdb} packages
