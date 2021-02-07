@@ -819,8 +819,18 @@ static int deleteZone(const DNSName &zone) {
     return EXIT_FAILURE;
   }
 
-  if(di.backend->deleteDomain(zone))
-    return EXIT_SUCCESS;
+  di.backend->startTransaction(zone, -1);
+  try {
+    if(di.backend->deleteDomain(zone)) {
+      di.backend->commitTransaction();
+      return EXIT_SUCCESS;
+    }
+  } catch (...) {
+    di.backend->abortTransaction();
+    throw;
+  }
+
+  di.backend->abortTransaction();
 
   cerr<<"Failed to delete domain '"<<zone<<"'"<<endl;;
   return EXIT_FAILURE;
@@ -1059,6 +1069,12 @@ static int editZone(const DNSName &zone) {
   }
   catch(std::exception& e) {
     cerr<<"Problem: "<<e.what()<<" "<<zpt.getLineOfFile()<<endl;
+    auto fnum = zpt.getLineNumAndFile();
+    gotoline = fnum.second;
+    goto reAsk;
+  }
+  catch(PDNSException& e) {
+    cerr<<"Problem: "<<e.reason<<" "<<zpt.getLineOfFile()<<endl;
     auto fnum = zpt.getLineNumAndFile();
     gotoline = fnum.second;
     goto reAsk;
