@@ -1,3 +1,9 @@
+pdns (4.4.1-2) experimental; urgency=medium
+
+  * Build with fixed luajit on arm64
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Wed, 17 Feb 2021 16:29:25 +0000
+
 pdns (4.4.1-1) unstable; urgency=medium
 
   * New upstream version 4.4.1 with important bugfixes
