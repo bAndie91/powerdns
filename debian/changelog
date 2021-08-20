@@ -1,3 +1,11 @@
+pdns (4.4.1-3) unstable; urgency=medium
+
+  * Upload to unstable.
+  * Unconditionally depend on libsystemd-dev.
+    Already was required by d/rules.
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Fri, 20 Aug 2021 16:33:09 +0000
+
 pdns (4.4.1-2) experimental; urgency=medium
 
   * Build with fixed luajit on arm64
