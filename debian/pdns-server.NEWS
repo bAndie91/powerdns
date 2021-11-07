@@ -1,7 +1,7 @@
 pdns (4.3.0-1) unstable; urgency=medium
 
-  Superslave operation is no longer enabled by default, use the superslave
-  configuration option to enable.
+  Autosecondary operation is no longer enabled by default, use the
+  autosecondary configuration option to enable.
 
   Bind and SQL backends have a mandatory schema upgrade, please use
   the included SQL files.
