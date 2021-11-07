@@ -1,3 +1,13 @@
+pdns (4.4.1-4) unstable; urgency=medium
+
+  * Disable "random" backend.
+    Removed upstream in 4.6.0.
+  * tests-source: improve waiting for pdns to start and give it more time.
+    This hopefully fixes the reported FTBFS on loaded machines.
+    (Closes: #998547)
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Sun, 07 Nov 2021 16:31:30 +0000
+
 pdns (4.4.1-3) unstable; urgency=medium
 
   * Upload to unstable.
