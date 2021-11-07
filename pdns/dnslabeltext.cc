@@ -730,6 +730,224 @@ _again:
   return counter;
 }
 
+size_t parseSVCBValueListFromParsedRFC1035CharString(const std::string &in, std::vector<std::string> &val) {
+  val.clear();
+  const char *p = in.c_str();
+  const char *pe = p + in.size();
+  int cs = 0;
+  const char* eof = pe;
+  // Keeps track of how many chars we read from the source string
+  size_t counter=0;
+
+  // Here we store the parsed value until we hit a comma or are done
+  std::string tmp;
+
+
+#line 747 "dnslabeltext.cc"
+static const char _dns_text_to_value_list_actions[] = {
+	0, 1, 0, 1, 2, 1, 3, 2, 
+	2, 3, 2, 3, 1
+};
+
+static const char _dns_text_to_value_list_key_offsets[] = {
+	0, 0, 2, 4, 6
+};
+
+static const unsigned char _dns_text_to_value_list_trans_keys[] = {
+	44u, 92u, 44u, 92u, 44u, 92u, 44u, 92u, 
+	0
+};
+
+static const char _dns_text_to_value_list_single_lengths[] = {
+	0, 2, 2, 2, 2
+};
+
+static const char _dns_text_to_value_list_range_lengths[] = {
+	0, 0, 0, 0, 0
+};
+
+static const char _dns_text_to_value_list_index_offsets[] = {
+	0, 0, 3, 6, 9
+};
+
+static const char _dns_text_to_value_list_indicies[] = {
+	1, 2, 0, 3, 3, 1, 1, 2, 
+	0, 4, 2, 0, 0
+};
+
+static const char _dns_text_to_value_list_trans_targs[] = {
+	4, 0, 2, 4, 1
+};
+
+static const char _dns_text_to_value_list_trans_actions[] = {
+	1, 0, 5, 10, 7
+};
+
+static const char _dns_text_to_value_list_eof_actions[] = {
+	0, 0, 0, 0, 3
+};
+
+static const int dns_text_to_value_list_start = 3;
+static const int dns_text_to_value_list_first_final = 3;
+static const int dns_text_to_value_list_error = 0;
+
+static const int dns_text_to_value_list_en_main = 3;
+
+
+#line 798 "dnslabeltext.cc"
+	{
+	cs = dns_text_to_value_list_start;
+	}
+
+#line 288 "dnslabeltext.rl"
+
+
+  // silence warnings
+  (void) dns_text_to_value_list_first_final;
+  (void) dns_text_to_value_list_error;
+  (void) dns_text_to_value_list_en_main;
+  
+#line 811 "dnslabeltext.cc"
+	{
+	int _klen;
+	unsigned int _trans;
+	const char *_acts;
+	unsigned int _nacts;
+	const unsigned char *_keys;
+
+	if ( p == pe )
+		goto _test_eof;
+	if ( cs == 0 )
+		goto _out;
+_resume:
+	_keys = _dns_text_to_value_list_trans_keys + _dns_text_to_value_list_key_offsets[cs];
+	_trans = _dns_text_to_value_list_index_offsets[cs];
+
+	_klen = _dns_text_to_value_list_single_lengths[cs];
+	if ( _klen > 0 ) {
+		const unsigned char *_lower = _keys;
+		const unsigned char *_mid;
+		const unsigned char *_upper = _keys + _klen - 1;
+		while (1) {
+			if ( _upper < _lower )
+				break;
+
+			_mid = _lower + ((_upper-_lower) >> 1);
+			if ( (*p) < *_mid )
+				_upper = _mid - 1;
+			else if ( (*p) > *_mid )
+				_lower = _mid + 1;
+			else {
+				_trans += (unsigned int)(_mid - _keys);
+				goto _match;
+			}
+		}
+		_keys += _klen;
+		_trans += _klen;
+	}
+
+	_klen = _dns_text_to_value_list_range_lengths[cs];
+	if ( _klen > 0 ) {
+		const unsigned char *_lower = _keys;
+		const unsigned char *_mid;
+		const unsigned char *_upper = _keys + (_klen<<1) - 2;
+		while (1) {
+			if ( _upper < _lower )
+				break;
+
+			_mid = _lower + (((_upper-_lower) >> 1) & ~1);
+			if ( (*p) < _mid[0] )
+				_upper = _mid - 2;
+			else if ( (*p) > _mid[1] )
+				_lower = _mid + 2;
+			else {
+				_trans += (unsigned int)((_mid - _keys)>>1);
+				goto _match;
+			}
+		}
+		_trans += _klen;
+	}
+
+_match:
+	_trans = _dns_text_to_value_list_indicies[_trans];
+	cs = _dns_text_to_value_list_trans_targs[_trans];
+
+	if ( _dns_text_to_value_list_trans_actions[_trans] == 0 )
+		goto _again;
+
+	_acts = _dns_text_to_value_list_actions + _dns_text_to_value_list_trans_actions[_trans];
+	_nacts = (unsigned int) *_acts++;
+	while ( _nacts-- > 0 )
+	{
+		switch ( *_acts++ )
+		{
+	case 0:
+#line 259 "dnslabeltext.rl"
+	{
+    tmp += (*p);
+    counter++;
+  }
+	break;
+	case 1:
+#line 264 "dnslabeltext.rl"
+	{
+    tmp += (*p);
+  }
+	break;
+	case 2:
+#line 268 "dnslabeltext.rl"
+	{
+    val.push_back(tmp);
+    tmp.clear();
+    counter++;
+  }
+	break;
+	case 3:
+#line 274 "dnslabeltext.rl"
+	{
+    counter++;
+  }
+	break;
+#line 912 "dnslabeltext.cc"
+		}
+	}
+
+_again:
+	if ( cs == 0 )
+		goto _out;
+	if ( ++p != pe )
+		goto _resume;
+	_test_eof: {}
+	if ( p == eof )
+	{
+	const char *__acts = _dns_text_to_value_list_actions + _dns_text_to_value_list_eof_actions[cs];
+	unsigned int __nacts = (unsigned int) *__acts++;
+	while ( __nacts-- > 0 ) {
+		switch ( *__acts++ ) {
+	case 2:
+#line 268 "dnslabeltext.rl"
+	{
+    val.push_back(tmp);
+    tmp.clear();
+    counter++;
+  }
+	break;
+#line 936 "dnslabeltext.cc"
+		}
+	}
+	}
+
+	_out: {}
+	}
+
+#line 295 "dnslabeltext.rl"
+
+  if ( cs < dns_text_to_value_list_first_final ) {
+          throw runtime_error("Unable to parse DNS SVCB value list '"+in+"'");
+  }
+
+  return counter;
+}
 
 
 #if 0

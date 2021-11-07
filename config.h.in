@@ -52,8 +52,8 @@
 /* Define to 1 if you have the `CRYPTO_memcmp' function. */
 #undef HAVE_CRYPTO_MEMCMP
 
-/* define if the compiler supports basic C++11 syntax */
-#undef HAVE_CXX11
+/* define if the compiler supports basic C++17 syntax */
+#undef HAVE_CXX17
 
 /* Define to 1 if you have the declaration of `NID_ED25519', and to 0 if you
    don't. */
@@ -74,6 +74,9 @@
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
+/* Define to 1 if you enable DNS over TLS support */
+#undef HAVE_DNS_OVER_TLS
+
 /* Define to 1 if you have the `EVP_MD_CTX_free' function. */
 #undef HAVE_EVP_MD_CTX_FREE
 
@@ -91,6 +94,15 @@
 
 /* Define to 1 if you have the `gmtime_r' function. */
 #undef HAVE_GMTIME_R
+
+/* Define to 1 if you have GnuTLS */
+#undef HAVE_GNUTLS
+
+/* Define to 1 if you have the `gnutls_memset' function. */
+#undef HAVE_GNUTLS_MEMSET
+
+/* Define to 1 if you have the `gnutls_session_set_verify_cert' function. */
+#undef HAVE_GNUTLS_SESSION_SET_VERIFY_CERT
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
@@ -147,6 +159,9 @@
 /* Define to 1 if you have libsodium */
 #undef HAVE_LIBSODIUM
 
+/* Define to 1 if you have OpenSSL libssl */
+#undef HAVE_LIBSSL
+
 /* Define to 1 if you have libzmq */
 #undef HAVE_LIBZMQ
 
@@ -174,6 +189,9 @@
 /* Define this if you have Maxmind DB */
 #undef HAVE_MMDB
 
+/* Define to 1 if you have the `OCSP_basic_sign' function. */
+#undef HAVE_OCSP_BASIC_SIGN
+
 /* Define to 1 if you have the `OPENSSL_init_crypto' function. */
 #undef HAVE_OPENSSL_INIT_CRYPTO
 
@@ -182,9 +200,6 @@
 
 /* Define to 1 if you have 0.20 or newer P11-kit */
 #undef HAVE_P11KIT1_V2
-
-/* Define if using protobuf. */
-#undef HAVE_PROTOBUF
 
 /* Define to 1 if you have the <pthread_np.h> header file. */
 #undef HAVE_PTHREAD_NP_H
@@ -237,6 +252,24 @@
 
 /* Define to 1 if you have sqlite3 */
 #undef HAVE_SQLITE3
+
+/* Define to 1 if you have the `SSL_CTX_get0_privatekey' function. */
+#undef HAVE_SSL_CTX_GET0_PRIVATEKEY
+
+/* Define to 1 if you have the `SSL_CTX_set_ciphersuites' function. */
+#undef HAVE_SSL_CTX_SET_CIPHERSUITES
+
+/* Define to 1 if you have the `SSL_CTX_set_keylog_callback' function. */
+#undef HAVE_SSL_CTX_SET_KEYLOG_CALLBACK
+
+/* Define to 1 if you have the `SSL_CTX_set_min_proto_version' function. */
+#undef HAVE_SSL_CTX_SET_MIN_PROTO_VERSION
+
+/* Define to 1 if you have the `SSL_CTX_set_num_tickets' function. */
+#undef HAVE_SSL_CTX_SET_NUM_TICKETS
+
+/* Define to 1 if you have the `SSL_set_hostflags' function. */
+#undef HAVE_SSL_SET_HOSTFLAGS
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H
@@ -385,11 +418,36 @@
 /* Define to 1 for reproducible builds */
 #undef REPRODUCIBLE
 
+/* The number of bytes in type time_t */
+#undef SIZEOF_TIME_T
+
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
 
 /* Define to 1 if your <sys/time.h> declares `struct tm'. */
 #undef TM_IN_SYS_TIME
+
+/* Enable extensions on AIX 3, Interix.  */
+#ifndef _ALL_SOURCE
+# undef _ALL_SOURCE
+#endif
+/* Enable GNU extensions on systems that have them.  */
+#ifndef _GNU_SOURCE
+# undef _GNU_SOURCE
+#endif
+/* Enable threading extensions on Solaris.  */
+#ifndef _POSIX_PTHREAD_SEMANTICS
+# undef _POSIX_PTHREAD_SEMANTICS
+#endif
+/* Enable extensions on HP NonStop.  */
+#ifndef _TANDEM_SOURCE
+# undef _TANDEM_SOURCE
+#endif
+/* Enable general extensions on Solaris.  */
+#ifndef __EXTENSIONS__
+# undef __EXTENSIONS__
+#endif
+
 
 /* Define to 1 if verbose logging is enabled */
 #undef VERBOSELOG
@@ -401,8 +459,15 @@
    `char[]'. */
 #undef YYTEXT_POINTER
 
-/* Define _GNU_SOURCE so that we get all necessary prototypes */
-#undef _GNU_SOURCE
+/* Define to 1 if on MINIX. */
+#undef _MINIX
+
+/* Define to 2 if the system does not provide POSIX.1 features except with
+   this defined. */
+#undef _POSIX_1_SOURCE
+
+/* Define to 1 if you need to in order for `stat' and other things to work. */
+#undef _POSIX_SOURCE
 
 /* Define curl_free() as free() if our version of curl lacks curl_free. */
 #undef curl_free

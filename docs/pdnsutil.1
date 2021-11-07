@@ -1,8 +1,5 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "PDNSUTIL" "1" "Feb 06, 2021" "" "PowerDNS Authoritative Server"
-.SH NAME
-pdnsutil \- PowerDNS record and DNSSEC command and control
 .
 .nr rst2man-indent-level 0
 .
@@ -30,6 +27,9 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
+.TH "PDNSUTIL" "1" "Jul 22, 2021" "" "PowerDNS Authoritative Server"
+.SH NAME
+pdnsutil \- PowerDNS record and DNSSEC command and control
 .SH SYNOPSIS
 .sp
 pdnsutil [OPTION]... \fICOMMAND\fP
@@ -43,13 +43,13 @@ remotely, and can configure key material on different servers.
 .SH OPTIONS
 .INDENT 0.0
 .TP
-.B \-h\fP,\fB  \-\-help
+.B  \-h\fP,\fB  \-\-help
 Show summary of options
 .TP
-.B \-v\fP,\fB  \-\-verbose
+.B  \-v\fP,\fB  \-\-verbose
 Be more verbose.
 .TP
-.B \-\-force
+.B  \-\-force
 Force an action
 .TP
 .BI \-\-config\-name \ <NAME>
@@ -90,8 +90,8 @@ ed448
 .B activate\-zone\-key \fIZONE\fP \fIKEY\-ID\fP
 Activate a key with id \fIKEY\-ID\fP within a zone called \fIZONE\fP\&.
 .TP
-add\-zone\-key \fIZONE\fP {\fBKSK\fP,\fBZSK\fP} [\fBactive\fP,\fBinactive\fP] [\fBpublished\fP,\fBunpublished\fP] \fIKEYBITS\fP \fIALGORITHM\fP
-Create a new key for zone \fIZONE\fP, and make it a KSK or a ZSK, with
+add\-zone\-key \fIZONE\fP [\fBKSK\fP,\fBZSK\fP] [\fBactive\fP,\fBinactive\fP] [\fBpublished\fP,\fBunpublished\fP] \fIKEYBITS\fP \fIALGORITHM\fP
+Create a new key for zone \fIZONE\fP, and make it a KSK or a ZSK (default), with
 the specified algorithm. The key is inactive by default, set it to
 \fBactive\fP to immediately use it to sign \fIZONE\fP\&. The key is published
 in the zone by default, set it to \fBunpublished\fP to keep it from
@@ -205,12 +205,12 @@ hmac\-sha512
 .UNINDENT
 .INDENT 0.0
 .TP
-activate\-tsig\-key \fIZONE\fP \fINAME\fP {\fBmaster\fP,\fBslave\fP}
+activate\-tsig\-key \fIZONE\fP \fINAME\fP {\fBprimary\fP,\fBsecondary\fP}
 Enable TSIG authenticated AXFR using the key \fINAME\fP for zone \fIZONE\fP\&.
-This sets the \fBTSIG\-ALLOW\-AXFR\fP (master) or \fBAXFR\-MASTER\-TSIG\fP
-(slave) zone metadata.
+This sets the \fBTSIG\-ALLOW\-AXFR\fP (primary) or \fBAXFR\-MASTER\-TSIG\fP
+(secondary) zone metadata.
 .TP
-deactivate\-tsig\-key \fIZONE\fP \fINAME\fP {\fBmaster\fP,\fBslave\fP}
+deactivate\-tsig\-key \fIZONE\fP \fINAME\fP {\fBprimary\fP,\fBsecondary\fP}
 Disable TSIG authenticated AXFR using the key \fINAME\fP for zone
 \fIZONE\fP\&.
 .TP
@@ -234,19 +234,19 @@ Show a list of all configured TSIG keys.
 Add one or more records of \fINAME\fP and \fITYPE\fP to \fIZONE\fP with \fICONTENT\fP
 and optional \fITTL\fP\&. If \fITTL\fP is not set, default will be used.
 .TP
-.B add\-supermaster \fIIP\fP \fINAMESERVER\fP [\fIACCOUNT\fP]
-Add a supermaster entry into the backend. This enables receiving zone updates from other servers.
+.B add\-autoprimary \fIIP\fP \fINAMESERVER\fP [\fIACCOUNT\fP]
+Add a autoprimary entry into the backend. This enables receiving zone updates from other servers.
 .TP
 .B create\-zone \fIZONE\fP
 Create an empty zone named \fIZONE\fP\&.
 .TP
-.B create\-slave\-zone \fIZONE\fP \fIMASTER\fP [\fIMASTER\fP]..
-Create a new slave zone \fIZONE\fP with masters \fIMASTER\fP\&. All \fIMASTER\fPs
+.B create\-secondary\-zone \fIZONE\fP \fIPRIMARY\fP [\fIPRIMARY\fP]..
+Create a new secondary zone \fIZONE\fP with primaries \fIPRIMARY\fP\&. All \fIPRIMARY\fPs
 need to to be space\-separated IP addresses with an optional port.
 .TP
-.B change\-slave\-zone\-master \fIZONE\fP \fIMASTER\fP [\fIMASTER\fP]..
-Change the masters for slave zone \fIZONE\fP to new masters \fIMASTER\fP\&. All
-\fIMASTER\fPs need to to be space\-separated IP addresses with an optional port.
+.B change\-secondary\-zone\-primary \fIZONE\fP \fIPRIMARY\fP [\fIPRIMARY\fP]..
+Change the primaries for secondary zone \fIZONE\fP to new primaries \fIPRIMARY\fP\&. All
+\fIPRIMARY\fPs need to to be space\-separated IP addresses with an optional port.
 .TP
 .B check\-all\-zones
 Check all zones for correctness.
@@ -255,7 +255,7 @@ Check all zones for correctness.
 Check zone \fIZONE\fP for correctness.
 .TP
 .B clear\-zone \fIZONE\fP
-Clear the records in zone \fIZONE\fP, but leave actual domain and
+Clear the records in zone \fIZONE\fP, but leave actual zone and
 settings unchanged
 .TP
 .B delete\-rrset \fIZONE\fP \fINAME\fP \fITYPE\fP
@@ -281,10 +281,12 @@ settings.
 Increases the SOA\-serial by 1. Uses SOA\-EDIT.
 .TP
 .B list\-keys [\fIZONE\fP]
-List DNSSEC information for all keys or for \fIZONE\fP\&.
+List DNSSEC information for all keys or for \fIZONE\fP\&. \-\-verbose or \-v will
+also include the keys for disabled or empty zones.
 .TP
 .B list\-all\-zones:
-List all zone names.
+List all active zone names. \-\-verbose or \-v will also include disabled
+or empty zones.
 .TP
 .B list\-zone \fIZONE\fP
 Show all records for \fIZONE\fP\&.
@@ -318,7 +320,7 @@ serial of those zones too. You should manually run \(aqpdnsutil
 rectify\-all\-zones\(aq afterwards.
 .TP
 .B set\-kind \fIZONE\fP \fIKIND\fP
-Change the kind of \fIZONE\fP to \fIKIND\fP (master, slave, native).
+Change the kind of \fIZONE\fP to \fIKIND\fP (primary, secondary, native).
 .TP
 .B set\-account \fIZONE\fP \fIACCOUNT\fP
 Change the account (owner) of \fIZONE\fP to \fIACCOUNT\fP\&.
@@ -329,7 +331,7 @@ Will return an error if \fIATTRIBUTE\fP does not support multiple values, use
 \fBset\-meta\fP for these values.
 .TP
 .B set\-meta \fIZONE\fP \fIATTRIBUTE\fP [\fIVALUE\fP]...
-Set domainmetadata \fIATTRIBUTE\fP for \fIZONE\fP to \fIVALUE\fP\&. An empty value
+Set zonemetadata \fIATTRIBUTE\fP for \fIZONE\fP to \fIVALUE\fP\&. An empty value
 clears it.
 .TP
 .B set\-presigned \fIZONE\fP
@@ -343,6 +345,9 @@ Test database schema, this creates the zone \fIZONE\fP
 .TP
 .B unset\-presigned \fIZONE\fP
 Disables presigned operation for \fIZONE\fP\&.
+.TP
+.B raw\-lua\-from\-content \fITYPE\fP \fICONTENT\fP
+Display record contents in a form suitable for dnsdist\(aqs \fISpoofRawAction\fP\&.
 .UNINDENT
 .SH DEBUGGING TOOLS
 .INDENT 0.0
@@ -354,7 +359,7 @@ careful!
 .TP
 .B bench\-db [\fIFILE\fP]
 Perform a benchmark of the backend\-database.
-\fIFILE\fP can be a file with a list, one per line, of domain names to use for this.
+\fIFILE\fP can be a file with a list, one per line, of zone names to use for this.
 If \fIFILE\fP is not specified, powerdns.com is used.
 .UNINDENT
 .SH OTHER TOOLS
@@ -372,6 +377,6 @@ pdns_server (1), pdns_control (1)
 .SH AUTHOR
 PowerDNS.COM BV
 .SH COPYRIGHT
-2001-2019, PowerDNS.COM BV
+2001-2021, PowerDNS.COM BV
 .\" Generated by docutils manpage writer.
 .

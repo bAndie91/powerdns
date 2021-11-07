@@ -116,7 +116,10 @@ subdir = modules/remotebackend
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ac_pthread_set_name.m4 \
 	$(top_srcdir)/m4/ax_arg_default_enable_disable.m4 \
-	$(top_srcdir)/m4/ax_cxx_compile_stdcxx_11.m4 \
+	$(top_srcdir)/m4/ax_check_sign.m4 \
+	$(top_srcdir)/m4/ax_compile_check_sizeof.m4 \
+	$(top_srcdir)/m4/ax_cxx_compile_stdcxx.m4 \
+	$(top_srcdir)/m4/ax_cxx_compile_stdcxx_17.m4 \
 	$(top_srcdir)/m4/ax_python_module.m4 $(top_srcdir)/m4/boost.m4 \
 	$(top_srcdir)/m4/libcurl.m4 $(top_srcdir)/m4/libtool.m4 \
 	$(top_srcdir)/m4/ltoptions.m4 $(top_srcdir)/m4/ltsugar.m4 \
@@ -138,6 +141,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_pthread_set_name.m4 \
 	$(top_srcdir)/m4/pdns_check_python_venv.m4 \
 	$(top_srcdir)/m4/pdns_check_ragel.m4 \
 	$(top_srcdir)/m4/pdns_check_sqlite3.m4 \
+	$(top_srcdir)/m4/pdns_check_time_t.m4 \
 	$(top_srcdir)/m4/pdns_d_fortify_source.m4 \
 	$(top_srcdir)/m4/pdns_enable_backend_unit_tests.m4 \
 	$(top_srcdir)/m4/pdns_enable_coverage.m4 \
@@ -149,6 +153,7 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_pthread_set_name.m4 \
 	$(top_srcdir)/m4/pdns_enable_remotebackend_zeromq.m4 \
 	$(top_srcdir)/m4/pdns_enable_reproducible.m4 \
 	$(top_srcdir)/m4/pdns_enable_sanitizers.m4 \
+	$(top_srcdir)/m4/pdns_enable_tls.m4 \
 	$(top_srcdir)/m4/pdns_enable_tools.m4 \
 	$(top_srcdir)/m4/pdns_enable_unit_tests.m4 \
 	$(top_srcdir)/m4/pdns_enable_verbose_logging.m4 \
@@ -157,13 +162,14 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ac_pthread_set_name.m4 \
 	$(top_srcdir)/m4/pdns_pie.m4 $(top_srcdir)/m4/pdns_relro.m4 \
 	$(top_srcdir)/m4/pdns_stack_protector.m4 \
 	$(top_srcdir)/m4/pdns_with_geo.m4 \
+	$(top_srcdir)/m4/pdns_with_gnutls.m4 \
 	$(top_srcdir)/m4/pdns_with_libdecaf.m4 \
 	$(top_srcdir)/m4/pdns_with_libsodium.m4 \
+	$(top_srcdir)/m4/pdns_with_libssl.m4 \
 	$(top_srcdir)/m4/pdns_with_lua.m4 \
 	$(top_srcdir)/m4/pdns_with_lua_records.m4 \
 	$(top_srcdir)/m4/pdns_with_mysql.m4 \
 	$(top_srcdir)/m4/pdns_with_postgresql.m4 \
-	$(top_srcdir)/m4/pdns_with_protobuf.m4 \
 	$(top_srcdir)/m4/pdns_with_service_user.m4 \
 	$(top_srcdir)/m4/pdns_with_sqlite3.m4 \
 	$(top_srcdir)/m4/pdns_with_unixodbc.m4 \
@@ -228,7 +234,8 @@ libtestremotebackend_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 am__libtestremotebackend_la_SOURCES_DIST = ../../pdns/arguments.hh \
 	../../pdns/arguments.cc ../../pdns/auth-packetcache.cc \
 	../../pdns/auth-packetcache.hh ../../pdns/auth-querycache.cc \
-	../../pdns/auth-querycache.hh ../../pdns/base32.cc \
+	../../pdns/auth-querycache.hh ../../pdns/auth-zonecache.cc \
+	../../pdns/auth-zonecache.hh ../../pdns/base32.cc \
 	../../pdns/base64.cc ../../pdns/dns.hh ../../pdns/dns.cc \
 	../../pdns/dns_random_urandom.cc ../../pdns/dnsbackend.hh \
 	../../pdns/dnsbackend.cc ../../pdns/dnslabeltext.cc \
@@ -255,6 +262,7 @@ am_libtestremotebackend_la_OBJECTS =  \
 	../../pdns/libtestremotebackend_la-arguments.lo \
 	../../pdns/libtestremotebackend_la-auth-packetcache.lo \
 	../../pdns/libtestremotebackend_la-auth-querycache.lo \
+	../../pdns/libtestremotebackend_la-auth-zonecache.lo \
 	../../pdns/libtestremotebackend_la-base32.lo \
 	../../pdns/libtestremotebackend_la-base64.lo \
 	../../pdns/libtestremotebackend_la-dns.lo \
@@ -344,6 +352,7 @@ am__depfiles_remade =  \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-arguments.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-packetcache.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-querycache.Plo \
+	../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-zonecache.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-base32.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-base64.Plo \
 	../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Plo \
@@ -669,6 +678,7 @@ CCDEPMODE = @CCDEPMODE@
 CDB_CFLAGS = @CDB_CFLAGS@
 CDB_LIBS = @CDB_LIBS@
 CFLAGS = @CFLAGS@
+CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CURL = @CURL@
 CXX = @CXX@
@@ -691,8 +701,10 @@ EXEEXT = @EXEEXT@
 FGREP = @FGREP@
 GEOIP_CFLAGS = @GEOIP_CFLAGS@
 GEOIP_LIBS = @GEOIP_LIBS@
+GNUTLS_CFLAGS = @GNUTLS_CFLAGS@
+GNUTLS_LIBS = @GNUTLS_LIBS@
 GREP = @GREP@
-HAVE_CXX11 = @HAVE_CXX11@
+HAVE_CXX17 = @HAVE_CXX17@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
@@ -718,6 +730,8 @@ LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBSODIUM_CFLAGS = @LIBSODIUM_CFLAGS@
 LIBSODIUM_LIBS = @LIBSODIUM_LIBS@
+LIBSSL_CFLAGS = @LIBSSL_CFLAGS@
+LIBSSL_LIBS = @LIBSSL_LIBS@
 LIBTOOL = @LIBTOOL@
 LIBZMQ_CFLAGS = @LIBZMQ_CFLAGS@
 LIBZMQ_LIBS = @LIBZMQ_LIBS@
@@ -763,9 +777,6 @@ PKG_CONFIG = @PKG_CONFIG@
 PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
 PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
 PROGRAM_LDFLAGS = @PROGRAM_LDFLAGS@
-PROTOBUF_CFLAGS = @PROTOBUF_CFLAGS@
-PROTOBUF_LIBS = @PROTOBUF_LIBS@
-PROTOC = @PROTOC@
 PYTHON = @PYTHON@
 PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
 PYTHON_PLATFORM = @PYTHON_PLATFORM@
@@ -914,7 +925,8 @@ BUILT_SOURCES = ../../pdns/dnslabeltext.cc
 libtestremotebackend_la_SOURCES = ../../pdns/arguments.hh \
 	../../pdns/arguments.cc ../../pdns/auth-packetcache.cc \
 	../../pdns/auth-packetcache.hh ../../pdns/auth-querycache.cc \
-	../../pdns/auth-querycache.hh ../../pdns/base32.cc \
+	../../pdns/auth-querycache.hh ../../pdns/auth-zonecache.cc \
+	../../pdns/auth-zonecache.hh ../../pdns/base32.cc \
 	../../pdns/base64.cc ../../pdns/dns.hh ../../pdns/dns.cc \
 	../../pdns/dns_random_urandom.cc ../../pdns/dnsbackend.hh \
 	../../pdns/dnsbackend.cc ../../pdns/dnslabeltext.cc \
@@ -1067,6 +1079,9 @@ libremotebackend.la: $(libremotebackend_la_OBJECTS) $(libremotebackend_la_DEPEND
 ../../pdns/libtestremotebackend_la-auth-querycache.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
+../../pdns/libtestremotebackend_la-auth-zonecache.lo:  \
+	../../pdns/$(am__dirstamp) \
+	../../pdns/$(DEPDIR)/$(am__dirstamp)
 ../../pdns/libtestremotebackend_la-base32.lo:  \
 	../../pdns/$(am__dirstamp) \
 	../../pdns/$(DEPDIR)/$(am__dirstamp)
@@ -1192,6 +1207,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-arguments.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-packetcache.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-querycache.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-zonecache.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-base32.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-base64.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Plo@am__quote@ # am--include-marker
@@ -1289,6 +1305,13 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/auth-querycache.cc' object='../../pdns/libtestremotebackend_la-auth-querycache.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-auth-querycache.lo `test -f '../../pdns/auth-querycache.cc' || echo '$(srcdir)/'`../../pdns/auth-querycache.cc
+
+../../pdns/libtestremotebackend_la-auth-zonecache.lo: ../../pdns/auth-zonecache.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-auth-zonecache.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-zonecache.Tpo -c -o ../../pdns/libtestremotebackend_la-auth-zonecache.lo `test -f '../../pdns/auth-zonecache.cc' || echo '$(srcdir)/'`../../pdns/auth-zonecache.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) ../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-zonecache.Tpo ../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-zonecache.Plo
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='../../pdns/auth-zonecache.cc' object='../../pdns/libtestremotebackend_la-auth-zonecache.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ../../pdns/libtestremotebackend_la-auth-zonecache.lo `test -f '../../pdns/auth-zonecache.cc' || echo '$(srcdir)/'`../../pdns/auth-zonecache.cc
 
 ../../pdns/libtestremotebackend_la-base32.lo: ../../pdns/base32.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(LIBTOOL) $(AM_V_lt) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libtestremotebackend_la_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ../../pdns/libtestremotebackend_la-base32.lo -MD -MP -MF ../../pdns/$(DEPDIR)/libtestremotebackend_la-base32.Tpo -c -o ../../pdns/libtestremotebackend_la-base32.lo `test -f '../../pdns/base32.cc' || echo '$(srcdir)/'`../../pdns/base32.cc
@@ -1831,6 +1854,7 @@ distclean: distclean-am
 		-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-arguments.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-packetcache.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-querycache.Plo
+	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-zonecache.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-base32.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-base64.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Plo
@@ -1925,6 +1949,7 @@ maintainer-clean: maintainer-clean-am
 		-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-arguments.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-packetcache.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-querycache.Plo
+	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-auth-zonecache.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-base32.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-base64.Plo
 	-rm -f ../../pdns/$(DEPDIR)/libtestremotebackend_la-dns.Plo
