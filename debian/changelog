@@ -1,3 +1,16 @@
+pdns (4.5.1-1) unstable; urgency=medium
+
+  * New upstream version 4.5.1
+    Note: requires 64bit time_t support, thus not all current
+    Debian architectures are supported.
+  * NEWS: remove outdated words
+  * NEWS: Note that lots of config parameters have changed names
+  * Remove upstream-metadata-field-unknown Homepage
+  * Update debian/copyright
+  * Update gsqlite3, lua2 example config files
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Sun, 07 Nov 2021 17:27:59 +0000
+
 pdns (4.4.1-4) unstable; urgency=medium
 
   * Disable "random" backend.
