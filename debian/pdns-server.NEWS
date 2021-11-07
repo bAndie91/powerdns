@@ -1,3 +1,13 @@
+pdns (4.5.1-1) unstable; urgency=medium
+
+  Upstream has renamed a number of configuration settings. You must
+  manually update your pdns.conf and included configuration files.
+
+  Please see the upstream upgrading guide at
+    https://doc.powerdns.com/authoritative/upgrading.html
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Sun, 07 Nov 2021 16:45:38 +0000
+
 pdns (4.3.0-1) unstable; urgency=medium
 
   Autosecondary operation is no longer enabled by default, use the
