@@ -20,21 +20,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#pragma once
+#include "misc.hh"
 
-#ifdef __cpp_lib_string_view
-using pdns_string_view = std::string_view;
-#else
-#include <boost/version.hpp>
-#if BOOST_VERSION >= 106400
-// string_view already exists in 1.61.0 but string_view::at() is not usable with modern compilers, see:
-// https://github.com/boostorg/utility/pull/26
-#include <boost/utility/string_view.hpp>
-using pdns_string_view = boost::string_view;
-#elif BOOST_VERSION >= 105300
-#include <boost/utility/string_ref.hpp>
-using pdns_string_view = boost::string_ref;
-#else
-using pdns_string_view = std::string;
-#endif
-#endif
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size);
+
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
+{
+
+  std::string val;
+
+  std::string input((char*)data, size);
+  parseRFC1035CharString(input, val);
+
+  return 0;
+}
