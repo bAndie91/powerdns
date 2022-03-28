@@ -1,6 +1,6 @@
 AC_PREREQ([2.69])
 
-AC_INIT([pdns], [4.5.3])
+AC_INIT([pdns], [4.6.1])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip tar-ustar -Wno-portability subdir-objects parallel-tests 1.11])
 AM_SILENT_RULES([yes])
@@ -169,9 +169,9 @@ AC_ARG_WITH([socketdir],
   [socketdir="$withval"]
 )
 
-modules="bind gmysql random"
+modules="bind gmysql"
 AC_ARG_WITH([modules],
-  [AS_HELP_STRING([--with-modules], [which backends to compile with @<:@default=bind gmysql random@:>@])],
+  [AS_HELP_STRING([--with-modules], [which backends to compile with @<:@default=bind gmysql@:>@])],
   [modules="$withval"]
 )
 
@@ -350,7 +350,6 @@ AC_CONFIG_FILES([
   modules/lmdbbackend/Makefile
   modules/lua2backend/Makefile
   modules/pipebackend/Makefile
-  modules/randombackend/Makefile
   modules/remotebackend/Makefile
   modules/tinydnsbackend/Makefile
 ])

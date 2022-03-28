@@ -994,7 +994,7 @@ uninstall-am:
 dvi: # do nothing to build dvi
 
 format-code:
-	./build-scripts/format-code `find . -type f -name '*.[ch][ch]' | sort | comm -23 - .not-formatted`
+	./build-scripts/format-code `find . -type f -name '*.[ch][ch]' | LANG=C sort | LANG=C comm -23 - .not-formatted`
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

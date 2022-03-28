@@ -52,6 +52,9 @@
 /* Define to 1 if you have the `CRYPTO_memcmp' function. */
 #undef HAVE_CRYPTO_MEMCMP
 
+/* Define to 1 if you have the `crypto_shorthash' function. */
+#undef HAVE_CRYPTO_SHORTHASH
+
 /* define if the compiler supports basic C++17 syntax */
 #undef HAVE_CXX17
 
@@ -83,6 +86,9 @@
 /* Define to 1 if you have the `EVP_MD_CTX_new' function. */
 #undef HAVE_EVP_MD_CTX_NEW
 
+/* Define to 1 if you have EVP_PKEY_CTX_set1_scrypt_salt */
+#undef HAVE_EVP_PKEY_CTX_SET1_SCRYPT_SALT
+
 /* Define if ASAN fiber annotation interface is available. */
 #undef HAVE_FIBER_SANITIZER
 
@@ -98,8 +104,15 @@
 /* Define to 1 if you have GnuTLS */
 #undef HAVE_GNUTLS
 
+/* Define to 1 if you have the `gnutls_alpn_set_protocols' function. */
+#undef HAVE_GNUTLS_ALPN_SET_PROTOCOLS
+
 /* Define to 1 if you have the `gnutls_memset' function. */
 #undef HAVE_GNUTLS_MEMSET
+
+/* Define to 1 if you have the `gnutls_session_get_verify_cert_status'
+   function. */
+#undef HAVE_GNUTLS_SESSION_GET_VERIFY_CERT_STATUS
 
 /* Define to 1 if you have the `gnutls_session_set_verify_cert' function. */
 #undef HAVE_GNUTLS_SESSION_SET_VERIFY_CERT
@@ -250,11 +263,20 @@
 /* Define to 1 if you have the `sendmmsg' function. */
 #undef HAVE_SENDMMSG
 
+/* Define to 1 if you have the `sodium_memcmp' function. */
+#undef HAVE_SODIUM_MEMCMP
+
 /* Define to 1 if you have sqlite3 */
 #undef HAVE_SQLITE3
 
 /* Define to 1 if you have the `SSL_CTX_get0_privatekey' function. */
 #undef HAVE_SSL_CTX_GET0_PRIVATEKEY
+
+/* Define to 1 if you have the `SSL_CTX_set_alpn_protos' function. */
+#undef HAVE_SSL_CTX_SET_ALPN_PROTOS
+
+/* Define to 1 if you have the `SSL_CTX_set_alpn_select_cb' function. */
+#undef HAVE_SSL_CTX_SET_ALPN_SELECT_CB
 
 /* Define to 1 if you have the `SSL_CTX_set_ciphersuites' function. */
 #undef HAVE_SSL_CTX_SET_CIPHERSUITES
@@ -265,8 +287,17 @@
 /* Define to 1 if you have the `SSL_CTX_set_min_proto_version' function. */
 #undef HAVE_SSL_CTX_SET_MIN_PROTO_VERSION
 
+/* Define to 1 if you have the `SSL_CTX_set_next_proto_select_cb' function. */
+#undef HAVE_SSL_CTX_SET_NEXT_PROTO_SELECT_CB
+
 /* Define to 1 if you have the `SSL_CTX_set_num_tickets' function. */
 #undef HAVE_SSL_CTX_SET_NUM_TICKETS
+
+/* Define to 1 if you have the `SSL_get0_alpn_selected' function. */
+#undef HAVE_SSL_GET0_ALPN_SELECTED
+
+/* Define to 1 if you have the `SSL_get0_next_proto_negotiated' function. */
+#undef HAVE_SSL_GET0_NEXT_PROTO_NEGOTIATED
 
 /* Define to 1 if you have the `SSL_set_hostflags' function. */
 #undef HAVE_SSL_SET_HOSTFLAGS

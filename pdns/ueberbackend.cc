@@ -50,8 +50,7 @@
 
 extern StatBag S;
 
-vector<UeberBackend *>UeberBackend::instances;
-std::mutex UeberBackend::instances_lock;
+LockGuarded<vector<UeberBackend *>> UeberBackend::d_instances;
 
 // initially we are blocked
 bool UeberBackend::d_go=false;
@@ -285,9 +284,9 @@ void UeberBackend::updateZoneCache() {
   for (vector<DNSBackend*>::iterator i = backends.begin(); i != backends.end(); ++i )
   {
     vector<DomainInfo> zones;
-    (*i)->getAllDomains(&zones, true);
+    (*i)->getAllDomains(&zones, false, true);
     for(auto& di: zones) {
-      zone_indices.push_back({std::move(di.zone), (int)di.id});  // this cast should not be necessary
+      zone_indices.emplace_back(std::move(di.zone), (int)di.id); // this cast should not be necessary
     }
   }
   g_zoneCache.replace(zone_indices);
@@ -346,7 +345,7 @@ bool UeberBackend::getAuth(const DNSName &target, const QType& qtype, SOAData* s
   bool found = false;
   int cstat;
   DNSName shorter(target);
-  vector<pair<size_t, SOAData> > bestmatch (backends.size(), make_pair(target.wirelength()+1, SOAData()));
+  vector<pair<size_t, SOAData> > bestmatch (backends.size(), pair(target.wirelength()+1, SOAData()));
   do {
     int zoneId{-1};
     if(cachedOk && g_zoneCache.isEnabled()) {
@@ -513,12 +512,28 @@ bool UeberBackend::getSOAUncached(const DNSName &domain, SOAData &sd)
   return false;
 }
 
-bool UeberBackend::superMasterAdd(const string &ip, const string &nameserver, const string &account) 
+bool UeberBackend::superMasterAdd(const AutoPrimary &primary)
 {
   for(auto backend : backends)
-    if(backend->superMasterAdd(ip, nameserver, account)) 
+    if(backend->superMasterAdd(primary))
       return true;
   return false;
+}
+
+bool UeberBackend::autoPrimaryRemove(const AutoPrimary &primary)
+{
+  for(auto backend : backends)
+    if(backend->autoPrimaryRemove(primary))
+      return true;
+  return false;
+}
+
+bool UeberBackend::autoPrimariesList(std::vector<AutoPrimary>& primaries)
+{
+   for(auto backend : backends)
+     if(backend->autoPrimariesList(primaries))
+       return true;
+   return false;
 }
 
 bool UeberBackend::superMasterBackend(const string &ip, const DNSName &domain, const vector<DNSResourceRecord>&nsset, string *nameserver, string *account, DNSBackend **db)
@@ -532,8 +547,7 @@ bool UeberBackend::superMasterBackend(const string &ip, const DNSName &domain, c
 UeberBackend::UeberBackend(const string &pname)
 {
   {
-    std::lock_guard<std::mutex> l(instances_lock);
-    instances.push_back(this); // report to the static list of ourself
+    d_instances.lock()->push_back(this); // report to the static list of ourself
   }
 
   d_negcached=false;
@@ -554,9 +568,9 @@ static void del(DNSBackend* d)
 void UeberBackend::cleanup()
 {
   {
-    std::lock_guard<std::mutex> l(instances_lock);
-    remove(instances.begin(),instances.end(),this);
-    instances.resize(instances.size()-1);
+    auto instances = d_instances.lock();
+    remove(instances->begin(), instances->end(), this);
+    instances->resize(instances->size()-1);
   }
 
   for_each(backends.begin(),backends.end(),del);
@@ -628,7 +642,7 @@ void UeberBackend::lookup(const QType &qtype,const DNSName &qname, int zoneId, D
     throw PDNSException("We are stale, please recycle");
   }
 
-  DLOG(g_log<<"UeberBackend received question for "<<qtype.toString()<<" of "<<qname<<endl);
+  DLOG(g_log<<"UeberBackend received question for "<<qtype<<" of "<<qname<<endl);
   if (!d_go) {
     g_log<<Logger::Error<<"UeberBackend is blocked, waiting for 'go'"<<endl;
     std::unique_lock<std::mutex> l(d_mut);
@@ -679,10 +693,11 @@ void UeberBackend::lookup(const QType &qtype,const DNSName &qname, int zoneId, D
   d_handle.parent=this;
 }
 
-void UeberBackend::getAllDomains(vector<DomainInfo> *domains, bool include_disabled) {
+void UeberBackend::getAllDomains(vector<DomainInfo>* domains, bool getSerial, bool include_disabled)
+{
   for (auto & backend : backends)
   {
-    backend->getAllDomains(domains, include_disabled);
+    backend->getAllDomains(domains, getSerial, include_disabled);
   }
 }
 
@@ -760,7 +775,7 @@ UeberBackend::handle::~handle()
 
 bool UeberBackend::handle::get(DNSZoneRecord &r)
 {
-  DLOG(g_log << "Ueber get() was called for a "<<qtype.toString()<<" record" << endl);
+  DLOG(g_log << "Ueber get() was called for a "<<qtype<<" record" << endl);
   bool isMore=false;
   while(d_hinterBackend && !(isMore=d_hinterBackend->get(r))) { // this backend out of answers
     if(i<parent->backends.size()) {
