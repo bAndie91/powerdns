@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "PDNSUTIL" "1" "Jan 19, 2022" "" "PowerDNS Authoritative Server"
+.TH "PDNSUTIL" "1" "Mar 21, 2022" "" "PowerDNS Authoritative Server"
 .SH NAME
 pdnsutil \- PowerDNS record and DNSSEC command and control
 .SH SYNOPSIS
@@ -156,7 +156,7 @@ prevent zone enumeration. Instead of looking it up in the database,
 it will send out the hash + 1 as the next secure record. Narrow mode
 requires online signing capabilities by the nameserver and therefore
 zone transfers are denied. If only the zone is provided as argument,
-the 4\-parameter quoted string defaults to \fB\(aq1 0 1 ab\(aq\fP\&. A sample
+the 4\-parameter quoted string defaults to \fB\(aq1 0 0 \-\(aq\fP\&. A sample
 commandline is: \fBpdnsutil set\-nsec3 powerdnssec.org \(aq1 1 1 ab\(aq narrow\fP\&.
 \fBWARNING\fP: If running in RSASHA1 mode (algorithm 5 or 7), switching
 from NSEC to NSEC3 will require a DS update in the parent zone.
@@ -237,6 +237,12 @@ and optional \fITTL\fP\&. If \fITTL\fP is not set, default will be used.
 .B add\-autoprimary \fIIP\fP \fINAMESERVER\fP [\fIACCOUNT\fP]
 Add a autoprimary entry into the backend. This enables receiving zone updates from other servers.
 .TP
+.B remove\-autoprimary \fIIP\fP \fINAMESERVER\fP
+Remove an autoprimary from backend. Not supported by BIND backend.
+.TP
+.B list\-autoprimaries
+List all autoprimaries.
+.TP
 .B create\-zone \fIZONE\fP
 Create an empty zone named \fIZONE\fP\&.
 .TP
@@ -271,6 +277,12 @@ from) in the editor set in the environment variable \fBEDITOR\fP\&. if
 .TP
 .B get\-meta \fIZONE\fP [\fIATTRIBUTE\fP]...
 Get zone metadata. If no \fIATTRIBUTE\fP given, lists all known.
+.TP
+.B hash\-password [\fIWORK\-FACTOR\fP]
+This convenience command asks for a password and returns a hashed
+and salted version, for use as a webserver password or api key.
+An optional scrypt work factor can be specified, in power of two,
+otherwise it defaults to 1024.
 .TP
 .B hash\-zone\-record \fIZONE\fP \fIRNAME\fP
 This convenience command hashes the name \fIRNAME\fP according to the
@@ -369,7 +381,7 @@ If \fIFILE\fP is not specified, powerdns.com is used.
 Encrypt an IP address according to the \(aqipcipher\(aq standard
 .TP
 .B ipdecrypt \fIIP\-ADDRESS\fP password
-Encrypt an IP address according to the \(aqipcipher\(aq standard
+Decrypt an IP address according to the \(aqipcipher\(aq standard
 .UNINDENT
 .SH SEE ALSO
 .sp

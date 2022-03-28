@@ -27,7 +27,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.TH "SDIG" "1" "Jan 19, 2022" "" "PowerDNS Authoritative Server"
+.TH "SDIG" "1" "Mar 21, 2022" "" "PowerDNS Authoritative Server"
 .SH NAME
 sdig \- Perform a DNS query and show the results
 .SH SYNOPSIS
@@ -98,6 +98,9 @@ when using DoT, use TLS provider \fIname\fP\&. Currently supported (if compiled 
 .TP
 .B xpf \fIXPFCODE\fP \fIXPFVERSION\fP \fIXPFPROTO\fP \fIXPFSRC\fP \fIXPFDST\fP
 Send an \fIXPF\fP additional with these parameters.
+.TP
+.B opcode \fIOPNUM\fP
+Use opcode \fIOPNUM\fP instead of 0 (Query). For example, \fBsdig 192.0.2.1 53 example.com SOA opcode 4\fP sends a \fBNOTIFY\fP\&.
 .UNINDENT
 .SH EXAMPLES
 .INDENT 0.0

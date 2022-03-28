@@ -1948,6 +1948,165 @@
           }
         }
       }
+    },
+    "/servers/{server_id}/autoprimaries": {
+      "parameters": [
+        {
+          "name": "server_id",
+          "in": "path",
+          "required": true,
+          "description": "The id of the server to manage the list of autoprimaries on",
+          "type": "string"
+        }
+      ],
+      "get": {
+        "summary": "Get a list of autoprimaries",
+        "operationId": "getAutoprimaries",
+        "tags": [
+          "autoprimary"
+        ],
+        "responses": {
+          "400": {
+            "description": "The supplied request was not valid",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "404": {
+            "description": "Requested item was not found",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "422": {
+            "description": "The input to the operation was not valid",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "200": {
+            "description": "OK.",
+            "schema": {
+              "$ref": "#/definitions/Autoprimary"
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add an autoprimary",
+        "description": "This methods add a new autoprimary server.",
+        "operationId": "createAutoprimary",
+        "tags": [
+          "autoprimary"
+        ],
+        "parameters": [
+          {
+            "name": "autoprimary",
+            "description": "autoprimary entry to add",
+            "required": true,
+            "in": "body",
+            "schema": {
+              "$ref": "#/definitions/Autoprimary"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The supplied request was not valid",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "404": {
+            "description": "Requested item was not found",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "422": {
+            "description": "The input to the operation was not valid",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/servers/{server_id}/autoprimaries/{ip}/{nameserver}": {
+      "parameters": [
+        {
+          "name": "server_id",
+          "in": "path",
+          "required": true,
+          "description": "The id of the server to delete the autoprimary from",
+          "type": "string"
+        },
+        {
+          "name": "ip",
+          "in": "path",
+          "required": true,
+          "description": "IP address of autoprimary",
+          "type": "string"
+        },
+        {
+          "name": "nameserver",
+          "in": "path",
+          "required": true,
+          "description": "DNS name of the autoprimary",
+          "type": "string"
+        }
+      ],
+      "delete": {
+        "summary": "Delete the autoprimary entry",
+        "operationId": "deleteAutoprimary",
+        "tags": [
+          "autoprimary"
+        ],
+        "responses": {
+          "400": {
+            "description": "The supplied request was not valid",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "404": {
+            "description": "Requested item was not found",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "422": {
+            "description": "The input to the operation was not valid",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "204": {
+            "description": "OK, key was deleted"
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -2219,6 +2378,24 @@
           "type": "string",
           "description": "Set to \"TSIGKey\"",
           "readOnly": true
+        }
+      }
+    },
+    "Autoprimary": {
+      "title": "Autoprimary server",
+      "description": "An autoprimary server that can provision new domains.",
+      "properties": {
+        "ip": {
+          "type": "string",
+          "description": "IP address of the autoprimary server"
+        },
+        "nameserver": {
+          "type": "string",
+          "description": "DNS name of the autoprimary server"
+        },
+        "account": {
+          "type": "string",
+          "description": "Account name for the autoprimary server"
         }
       }
     },
