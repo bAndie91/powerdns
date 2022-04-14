@@ -1,3 +1,9 @@
+pdns (4.6.2-1) unstable; urgency=medium
+
+  * New upstream version 4.6.2
+
+ -- Chris Hofstaedtler <zeha@debian.org>  Thu, 14 Apr 2022 20:06:44 +0000
+
 pdns (4.6.1-1) unstable; urgency=medium
 
   * New upstream version 4.6.1, fixes CVE-2022-27227
