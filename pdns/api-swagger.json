@@ -370,6 +370,18 @@
             "description": "\u201ctrue\u201d (default) or \u201cfalse\u201d, whether to include the \u201crrsets\u201d in the response Zone object.",
             "type": "boolean",
             "default": true
+          },
+          {
+            "name": "rrset_name",
+            "in": "query",
+            "description": "Limit output to RRsets for this name.",
+            "type": "string"
+          },
+          {
+            "name": "rrset_type",
+            "in": "query",
+            "description": "Limit output to the RRset of this type. Can only be used together with rrset_name.",
+            "type": "string"
           }
         ],
         "responses": {

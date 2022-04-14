@@ -1,6 +1,6 @@
 AC_PREREQ([2.69])
 
-AC_INIT([pdns], [4.6.1])
+AC_INIT([pdns], [4.6.2])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([foreign dist-bzip2 no-dist-gzip tar-ustar -Wno-portability subdir-objects parallel-tests 1.11])
 AM_SILENT_RULES([yes])
