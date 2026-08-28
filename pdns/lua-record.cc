@@ -1001,6 +1001,46 @@ static void setupLuaRecords()
         g_log<<Logger::Error<<"Failed to load include record for LUArecord "<<rec<<": "<<e.what()<<endl;
       }
     });
+
+  lua.writeFunction("cat", [&lua](string filepath) {
+      std::ifstream infile(filepath);
+      std::string line;
+      std::getline(infile, line);
+      infile.close();
+      return line;
+    });
+
+  lua.writeFunction("includerecord", [&lua](string record, uint16_t qtype) {
+      try {
+        vector<DNSZoneRecord> drs;
+        drs = lookup(DNSName(record) + s_lua_record_ctx->zone, qtype, s_lua_record_ctx->zoneid);
+        for(const auto& dr : drs) {
+          DNSRecord rr = dr.dr;
+          std::shared_ptr<DNSRecordContent> content = rr.d_content;
+          return content->getZoneRepresentation();
+          // TODO: return multiple DRR
+        }
+        /* asked qtype was not found, trying with LUA record */
+        drs = lookup(DNSName(record) + s_lua_record_ctx->zone, QType::LUA, s_lua_record_ctx->zoneid);
+        for(const auto& dr : drs) {
+          auto lr = getRR<LUARecordContent>(dr.dr);
+          string code = lr->getCode();
+          string actual;
+          if(!code.empty() && code[0]!=';')
+            code = "return " + code;
+          else
+            code = code.substr(1);
+          string content = lua.executeCode<string>(code);
+          return content;
+          // TODO: return multiple DRR
+        }
+      }
+      catch(std::exception& e) {
+        g_log<<Logger::Error<<"Failed to load include record for DNSrecord "<<(DNSName(record)+s_lua_record_ctx->zone)<<": "<<e.what()<<endl;
+      }
+      std::basic_string<char> ret = "";
+      return ret;
+    });
 }
 
 std::vector<shared_ptr<DNSRecordContent>> luaSynth(const std::string& code, const DNSName& query, const DNSName& zone, int zoneid, const DNSPacket& dnsp, uint16_t qtype)
@@ -1037,6 +1077,8 @@ std::vector<shared_ptr<DNSRecordContent>> luaSynth(const std::string& code, cons
     s_lua_record_ctx->bestwho = dnsp.getInnerRemote();
   }
   lua.writeVariable("bestwho", s_lua_record_ctx->bestwho);
+  lua.writeVariable("qtype", qtype);
+  lua.writeVariable("qtypename", QType(qtype).toString());
 
   try {
     string actual;
