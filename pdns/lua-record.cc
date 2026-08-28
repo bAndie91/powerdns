@@ -1010,9 +1010,10 @@ static void setupLuaRecords()
       return line;
     });
 
-  lua.writeFunction("includerecord", [&lua](string record, uint16_t qtype) {
+  lua.writeFunction("includerecord", [&lua](string record, uint16_t qtype, string qtype_str) {
       try {
         vector<DNSZoneRecord> drs;
+        if(qtype_str.length() > 0) qtype = QType::chartocode(qtype_str.c_str());
         drs = lookup(DNSName(record) + s_lua_record_ctx->zone, qtype, s_lua_record_ctx->zoneid);
         for(const auto& dr : drs) {
           DNSRecord rr = dr.dr;
@@ -1024,6 +1025,10 @@ static void setupLuaRecords()
         drs = lookup(DNSName(record) + s_lua_record_ctx->zone, QType::LUA, s_lua_record_ctx->zoneid);
         for(const auto& dr : drs) {
           auto lr = getRR<LUARecordContent>(dr.dr);
+          if(lr->d_type != qtype) {
+          	// ignore LUA records which do not have in the requested type
+          	continue;
+          }
           string code = lr->getCode();
           string actual;
           if(!code.empty() && code[0]!=';')
