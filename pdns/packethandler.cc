@@ -46,6 +46,7 @@
 #include "version.hh"
 #include "common_startup.hh"
 #include "trusted-notification-proxy.hh"
+#include "stubresolver.hh"
 
 #if 0
 #undef DLOG
@@ -573,9 +574,29 @@ void PacketHandler::doAdditionalProcessing(DNSPacket& p, std::unique_ptr<DNSPack
   for(const auto& name : lookup) {
     B.lookup(QType(QType::ANY), name, d_sd.domain_id, &p);
     while(B.get(dzr)) {
-      if(dzr.dr.d_type == QType::A || dzr.dr.d_type == QType::AAAA) {
-        dzr.dr.d_place=DNSResourceRecord::ADDITIONAL;
-        r->addRecord(std::move(dzr));
+      if(dzr.dr.d_type == QType::A || dzr.dr.d_type == QType::AAAA || dzr.dr.d_type == QType::ALIAS) {
+        if(dzr.dr.d_type==QType::ALIAS) {
+        	/* resolve ALIAS record and add A and AAAA results to the response (additional section), so you'll get dynamic glue records! */
+            vector<DNSZoneRecord> ips;
+            int ret_a    = stubDoResolve(getRR<ALIASRecordContent>(dzr.dr)->d_content, QType::A,    ips);
+            int ret_aaaa = stubDoResolve(getRR<ALIASRecordContent>(dzr.dr)->d_content, QType::AAAA, ips);
+            if(ret_a != RCode::NoError && ret_a != RCode::NXDomain) {
+              g_log << Logger::Error << "Error '" << ERCode::to_s(ret_a) << "' resolving additional record " << dzr.dr.d_name << " ALIAS A " << getRR<ALIASRecordContent>(dzr.dr)->d_content << ", skip it" << endl;
+            }
+            if(ret_aaaa != RCode::NoError && ret_aaaa != RCode::NXDomain) {
+              g_log << Logger::Error << "Error '" << ERCode::to_s(ret_aaaa) << "' resolving additional record " << dzr.dr.d_name << " ALIAS AAAA " << getRR<ALIASRecordContent>(dzr.dr)->d_content << ", skip it" << endl;
+            }
+            for(const auto& ip: ips) {
+              dzr.dr.d_place = DNSResourceRecord::ADDITIONAL;
+              dzr.dr.d_type = ip.dr.d_type;
+              dzr.dr.d_content = ip.dr.d_content;
+              r->addRecord(std::move(dzr));
+            }
+        }
+        else {
+          dzr.dr.d_place=DNSResourceRecord::ADDITIONAL;
+          r->addRecord(std::move(dzr));
+        }
       }
     }
   }
