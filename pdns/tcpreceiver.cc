@@ -772,6 +772,25 @@ int TCPNameserver::doAXFR(const DNSName &target, std::unique_ptr<DNSPacket>& q, 
         continue;
       }
 
+      /* resolve LUA records as well, instead of executing lua code in place, so i don't need to hook up lua-record code here */
+      /* FIXME: it reflects all records from a particular qtype for each LUA record of that qtype, which leads to unexpectedly multiplicated records */
+      if (zrr.dr.d_type == QType::LUA && ::arg().mustDo("outgoing-axfr-expand-lua")) {
+        vector<DNSZoneRecord> ips;
+        int ret = stubDoResolve(zrr.dr.d_name, getRR<LUARecordContent>(zrr.dr)->d_type, ips);
+        if(ret != RCode::NoError) {
+          g_log<<Logger::Error<<"Error resolving LUA record "<<zrr.dr.d_name<<", aborting AXFR"<<endl;
+          outpacket->setRcode(RCode::ServFail);
+          sendPacket(outpacket,outsock);
+          return 0;
+        }
+        for(const auto& ip: ips) {
+          zrr.dr.d_type = ip.dr.d_type;
+          zrr.dr.d_content = ip.dr.d_content;
+          zrrs.push_back(zrr);
+        }
+        continue;
+      }
+
       if (rectify) {
         if (zrr.dr.d_type) {
           qnames.insert(zrr.dr.d_name);
