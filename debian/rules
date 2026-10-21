@@ -55,7 +55,7 @@ override_dh_install:
 	  -e 's!# include-dir=.*!&\ninclude-dir=/etc/powerdns/pdns.d!' \
 	  -e 's!# launch=.*!&\nlaunch=!' \
 	  -e 's!# security-poll-suffix=.*!&\nsecurity-poll-suffix=!' \
-	  -e '/^# rrsig-expiry-extend=/i\\# Additional seconds to extend live-signed RRSIG expiry (0 to 31536000).\\n' \\
+	  -e '/^# rrsig-expiry-extend=/s!$! # Additional seconds to extend live-signed RRSIG expiry (0 to 31536000)!' \
 	  > debian/pdns-server/etc/powerdns/pdns.conf
 
 override_dh_auto_test:
