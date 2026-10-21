@@ -31,6 +31,12 @@
 #include "lock.hh"
 #include "arguments.hh"
 #include "statbag.hh"
+#include <cerrno>
+#include <cstring>
+#include <mutex>
+#include <thread>
+#include <sys/wait.h>
+#include <unistd.h>
 extern StatBag S;
 
 typedef map<pair<string, string>, string> signaturecache_t;
@@ -39,6 +45,57 @@ static int g_cacheweekno;
 
 const static std::set<uint16_t> g_KSKSignedQTypes {QType::DNSKEY, QType::CDS, QType::CDNSKEY};
 AtomicCounter* g_signatureCount;
+
+static std::mutex g_rrsigUpdateCommandMutex;
+static std::map<std::string, uint32_t> g_rrsigUpdateCommandPeriods;
+
+static void runRRSIGUpdateCommand(const DNSName& signer, uint32_t period)
+{
+  const std::string command = ::arg()["rrsig-update-command"];
+  if (command.empty()) {
+    return;
+  }
+
+  const std::string zone = signer.toString();
+  {
+    std::lock_guard<std::mutex> lock(g_rrsigUpdateCommandMutex);
+    auto iter = g_rrsigUpdateCommandPeriods.find(zone);
+    if (iter != g_rrsigUpdateCommandPeriods.end() && iter->second == period) {
+      return;
+    }
+    g_rrsigUpdateCommandPeriods[zone] = period;
+  }
+
+  try {
+    std::thread([command, zone]() {
+      const pid_t child = fork();
+      if (child < 0) {
+        g_log << Logger::Error << "Unable to fork rrsig-update-command for zone " << zone << ": " << strerror(errno) << endl;
+        return;
+      }
+      if (child == 0) {
+        execl(command.c_str(), command.c_str(), zone.c_str(), static_cast<char*>(nullptr));
+        _exit(127);
+      }
+
+      int status = 0;
+      pid_t waited;
+      do {
+        waited = waitpid(child, &status, 0);
+      } while (waited < 0 && errno == EINTR);
+
+      if (waited < 0) {
+        g_log << Logger::Error << "Unable to wait for rrsig-update-command for zone " << zone << ": " << strerror(errno) << endl;
+      }
+      else if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        g_log << Logger::Error << "rrsig-update-command failed for zone " << zone << endl;
+      }
+    }).detach();
+  }
+  catch (const std::exception& e) {
+    g_log << Logger::Error << "Unable to start rrsig-update-command for zone " << zone << ": " << e.what() << endl;
+  }
+}
 
 static std::string getLookupKey(const std::string& msg)
 {
@@ -106,11 +163,17 @@ static int getRRSIGsForRRSET(DNSSECKeeper& dk, const DNSName& signer, const DNSN
   rrc.d_labels=signQName.countLabels()-signQName.isWildcard();
   rrc.d_originalttl=signTTL; 
   rrc.d_siginception=startOfWeek - 7*86400; // XXX should come from zone metadata
-  const static int rrsigExpiryExtend = ::arg().asNum("rrsig-expiry-extend", 0);
+  const int rrsigExpiryExtend = ::arg().asNum("rrsig-expiry-extend", 0);
   if (rrsigExpiryExtend < 0 || rrsigExpiryExtend > 31536000) {
     throw runtime_error("rrsig-expiry-extend must be between 0 and 31536000 seconds");
   }
-  rrc.d_sigexpire=startOfWeek + 14*86400 + rrsigExpiryExtend;
+  const int rrsigPublicationOverlap = ::arg().asNum("rrsig-publication-overlap", 604800);
+  if (rrsigPublicationOverlap < 0 || rrsigPublicationOverlap > 31536000) {
+    throw runtime_error("rrsig-publication-overlap must be between 0 and 31536000 seconds");
+  }
+  const uint32_t oneWeek = 7 * 86400;
+  const uint32_t additionalOverlap = rrsigPublicationOverlap > static_cast<int>(oneWeek) ? rrsigPublicationOverlap - oneWeek : 0;
+  rrc.d_sigexpire=startOfWeek + 14*86400 + additionalOverlap + rrsigExpiryExtend;
   rrc.d_signer = signer;
   rrc.d_tag = 0;
 
@@ -130,6 +193,19 @@ static int getRRSIGsForRRSET(DNSSECKeeper& dk, const DNSName& signer, const DNSN
 
     fillOutRRSIG(keymeta.first, signQName, rrc, toSign);
     rrcs.push_back(rrc);
+
+    // Keep the previous signing period's signature published during the overlap.
+    if (rrsigPublicationOverlap > 0 && time(nullptr) < static_cast<time_t>(startOfWeek) + rrsigPublicationOverlap) {
+      RRSIGRecordContent previous = rrc;
+      previous.d_siginception = startOfWeek - 14*86400;
+      const uint32_t previousOverlap = rrsigPublicationOverlap > static_cast<int>(oneWeek) ? rrsigPublicationOverlap : oneWeek;
+      previous.d_sigexpire = startOfWeek + previousOverlap + rrsigExpiryExtend;
+      fillOutRRSIG(keymeta.first, signQName, previous, toSign);
+      rrcs.push_back(previous);
+    }
+  }
+  if (!rrcs.empty()) {
+    runRRSIGUpdateCommand(signer, startOfWeek);
   }
   return 0;
 }

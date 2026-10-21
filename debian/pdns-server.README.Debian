@@ -33,3 +33,16 @@ to `0`, preserving the existing signature lifetime window. Set it in
 between `0` and `31536000` seconds. For example, `rrsig-expiry-extend=5184000`
 adds 60 days. This extends signature validity; it does not extend DNSSEC key
 lifetimes or replace key rollover planning.
+
+
+ + Live-signing RRSIG rollover
+
+The `rrsig-publication-overlap` setting controls how long previous-period
+RRSIGs are published alongside current-period signatures. It defaults to
+604800 seconds (one week) and accepts values from 0 to 31536000 seconds.
+The optional `rrsig-update-command` executable is run asynchronously with the
+zone name as its sole argument when live signing first produces a signature
+in a new signing period. The command can update the SOA serial and/or arrange
+for secondaries to refresh. It must be an executable path, not a shell command
+line; its exit status is logged. A quiet zone triggers the command only when
+it is first signed in the new period.
