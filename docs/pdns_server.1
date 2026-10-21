@@ -69,6 +69,15 @@ Show the currently configuration. There are three optional values:
 .B  \-\-help
 To view more options that are available use this program.
 .UNINDENT
+.SH RRSIG EXPIRY EXTENSION
+.sp
+The \fBrrsig-expiry-extend\fP configuration setting controls how many additional
+seconds are added to the expiration time of RRSIG records created by live DNSSEC
+signing. The default is \fB0\fP, which preserves the normal expiration window.
+Values must be between 0 and 31536000 seconds (one year). For example,
+\fBrrsig-expiry-extend=5184000\fP adds 60 days to the normal signing
+expiration window. This setting does not change DNSSEC key lifetimes or key
+rollover behavior.
 .SH SEE ALSO
 .sp
 pdns_control(1), pdnsutil(1), \fI\%https://doc.powerdns.com/\fP
