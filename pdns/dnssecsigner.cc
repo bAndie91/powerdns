@@ -106,7 +106,8 @@ static int getRRSIGsForRRSET(DNSSECKeeper& dk, const DNSName& signer, const DNSN
   rrc.d_labels=signQName.countLabels()-signQName.isWildcard();
   rrc.d_originalttl=signTTL; 
   rrc.d_siginception=startOfWeek - 7*86400; // XXX should come from zone metadata
-  rrc.d_sigexpire=startOfWeek + 14*86400;
+  const static int rrsigExpiryExtend = ::arg().asNum("rrsig-expiry-extend", 0);
+  rrc.d_sigexpire=startOfWeek + 14*86400 + rrsigExpiryExtend;
   rrc.d_signer = signer;
   rrc.d_tag = 0;
 
