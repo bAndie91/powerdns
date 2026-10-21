@@ -194,6 +194,8 @@ void declareArguments()
   ::arg().set("default-soa-edit","Default SOA-EDIT value")="";
   ::arg().set("default-soa-edit-signed","Default SOA-EDIT value for signed zones")="";
   ::arg().set("rrsig-expiry-extend", "Seconds to extend RRSIG expiry by (0 to 31536000)") = "0";
+  ::arg().set("rrsig-publication-overlap", "Seconds to publish previous-period RRSIGs after rollover (0 to 31536000)") = "604800";
+  ::arg().set("rrsig-update-command", "Executable to run once per zone when a new live-signing period starts") = "";
   ::arg().set("dnssec-key-cache-ttl","Seconds to cache DNSSEC keys from the database")="30";
   ::arg().set("domain-metadata-cache-ttl", "Seconds to cache zone metadata from the database") = "";
   ::arg().set("zone-metadata-cache-ttl", "Seconds to cache zone metadata from the database") = "60";
